@@ -1,3 +1,5 @@
+Do not use yet.
+
 Meteor integration in NativeScript using nativescript-websockets
 
 ```bash

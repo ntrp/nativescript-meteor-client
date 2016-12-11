@@ -1,6 +1,6 @@
 {
   "name": "nativescript-meteor-client",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Nativescript module enabling the use of the Meteor",
   "keywords": [
     "NativeScript",
