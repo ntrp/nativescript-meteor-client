@@ -1,6 +1,4 @@
 .idea
-meteor
-node_modules
 scripts
 src
 .gitignore
