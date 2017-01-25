@@ -77,8 +77,9 @@ exports.Promise.prototype.done = function (onFulfilled, onRejected) {           
                                                                                                                     //
 exports.name = "meteor-promise";                                                                                    // 1
 exports.version = "0.8.0";                                                                                          // 2
-exports.main = "promise_client.js";                                                                                 // 3
-                                                                                                                    // 4
+exports.main = "promise_server.js";                                                                                 // 3
+exports.browser = "promise_client.js";                                                                              // 4
+                                                                                                                    // 5
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 },"promise_client.js":function(require,exports){

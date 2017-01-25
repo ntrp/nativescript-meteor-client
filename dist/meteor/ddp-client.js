@@ -98,197 +98,196 @@ Meteor._inherits(MongoIDMap, IdMap);                                            
 // because it used a built-in sockjs mechanism. We could do it with WebSocket                                 // 10
 // ping frames or with DDP-level messages.)                                                                   // 11
 LivedataTest.ClientStream = function (endpoint, options) {                                                    // 12
-  var self = this;                                                                                            // 13
-  options = options || {};                                                                                    // 14
+    var self = this;                                                                                          // 13
+    options = options || {};                                                                                  // 14
                                                                                                               // 15
-  self.options = _.extend({                                                                                   // 16
-    retry: true                                                                                               // 17
-  }, options);                                                                                                // 18
+    self.options = _.extend({                                                                                 // 16
+        retry: true                                                                                           // 17
+    }, options);                                                                                              // 18
                                                                                                               // 19
-  self.client = null;  // created in _launchConnection                                                        // 20
-  self.endpoint = endpoint;                                                                                   // 21
+    self.client = null;  // created in _launchConnection                                                      // 20
+    self.endpoint = endpoint;                                                                                 // 21
                                                                                                               // 22
-  self.headers = self.options.headers || {};                                                                  // 23
-  self.npmFayeOptions = self.options.npmFayeOptions || {};                                                    // 24
+    self.headers = self.options.headers || {};                                                                // 23
+    self.npmFayeOptions = self.options.npmFayeOptions || {};                                                  // 24
                                                                                                               // 25
-  self._initCommon(self.options);                                                                             // 26
+    self._initCommon(self.options);                                                                           // 26
                                                                                                               // 27
-  //// Kickoff!                                                                                               // 28
-  self._launchConnection();                                                                                   // 29
+    //// Kickoff!                                                                                             // 28
+    self._launchConnection();                                                                                 // 29
 };                                                                                                            // 30
                                                                                                               // 31
 _.extend(LivedataTest.ClientStream.prototype, {                                                               // 32
                                                                                                               // 33
-  // data is a utf8 string. Data sent while not connected is dropped on                                       // 34
-  // the floor, and it is up the user of this API to retransmit lost                                          // 35
-  // messages on 'reset'                                                                                      // 36
-  send: function (data) {                                                                                     // 37
-    var self = this;                                                                                          // 38
-    if (self.currentStatus.connected) {                                                                       // 39
-      self.client.send(data);                                                                                 // 40
-      if (__meteor_runtime_config__.nsDebug) {                                                                // 41
-        Meteor._debug("ws --> ", data);                                                                       // 42
-      }                                                                                                       // 43
-    }                                                                                                         // 44
-  },                                                                                                          // 45
+    // data is a utf8 string. Data sent while not connected is dropped on                                     // 34
+    // the floor, and it is up the user of this API to retransmit lost                                        // 35
+    // messages on 'reset'                                                                                    // 36
+    send: function (data) {                                                                                   // 37
+        var self = this;                                                                                      // 38
+        if (self.currentStatus.connected) {                                                                   // 39
+            self.client.send(data);                                                                           // 40
+            if (__meteor_runtime_config__.nsDebug) {                                                          // 41
+                Meteor._debug("ws --> ", data);                                                               // 42
+            }                                                                                                 // 43
+        }                                                                                                     // 44
+    },                                                                                                        // 45
                                                                                                               // 46
-  // Changes where this connection points                                                                     // 47
-  _changeUrl: function (url) {                                                                                // 48
-    var self = this;                                                                                          // 49
-    self.endpoint = url;                                                                                      // 50
-  },                                                                                                          // 51
+    // Changes where this connection points                                                                   // 47
+    _changeUrl: function (url) {                                                                              // 48
+        var self = this;                                                                                      // 49
+        self.endpoint = url;                                                                                  // 50
+    },                                                                                                        // 51
                                                                                                               // 52
-  _onConnect: function (client) {                                                                             // 53
-    var self = this;                                                                                          // 54
+    _onConnect: function (client) {                                                                           // 53
+        var self = this;                                                                                      // 54
                                                                                                               // 55
-    if (client !== self.client) {                                                                             // 56
-      // This connection is not from the last call to _launchConnection.                                      // 57
-      // But _launchConnection calls _cleanup which closes previous connections.                              // 58
-      // It's our belief that this stifles future 'open' events, but maybe                                    // 59
-      // we are wrong?                                                                                        // 60
-      throw new Error("Got open from inactive client " + !!self.client);                                      // 61
-    }                                                                                                         // 62
+        if (client !== self.client) {                                                                         // 56
+            // This connection is not from the last call to _launchConnection.                                // 57
+            // But _launchConnection calls _cleanup which closes previous connections.                        // 58
+            // It's our belief that this stifles future 'open' events, but maybe                              // 59
+            // we are wrong?                                                                                  // 60
+            throw new Error("Got open from inactive client " + !!self.client);                                // 61
+        }                                                                                                     // 62
                                                                                                               // 63
-    if (self._forcedToDisconnect) {                                                                           // 64
-      // We were asked to disconnect between trying to open the connection and                                // 65
-      // actually opening it. Let's just pretend this never happened.                                         // 66
-      self.client.close();                                                                                    // 67
-      self.client = null;                                                                                     // 68
-      return;                                                                                                 // 69
-    }                                                                                                         // 70
+        if (self._forcedToDisconnect) {                                                                       // 64
+            // We were asked to disconnect between trying to open the connection and                          // 65
+            // actually opening it. Let's just pretend this never happened.                                   // 66
+            self.client.close();                                                                              // 67
+            self.client = null;                                                                               // 68
+            return;                                                                                           // 69
+        }                                                                                                     // 70
                                                                                                               // 71
-    if (self.currentStatus.connected) {                                                                       // 72
-      // We already have a connection. It must have been the case that we                                     // 73
-      // started two parallel connection attempts (because we wanted to                                       // 74
-      // 'reconnect now' on a hanging connection and we had no way to cancel the                              // 75
-      // connection attempt.) But this shouldn't happen (similarly to the client                              // 76
-      // !== self.client check above).                                                                        // 77
-      throw new Error("Two parallel connections?");                                                           // 78
-    }                                                                                                         // 79
+        if (self.currentStatus.connected) {                                                                   // 72
+            // We already have a connection. It must have been the case that we                               // 73
+            // started two parallel connection attempts (because we wanted to                                 // 74
+            // 'reconnect now' on a hanging connection and we had no way to cancel the                        // 75
+            // connection attempt.) But this shouldn't happen (similarly to the client                        // 76
+            // !== self.client check above).                                                                  // 77
+            throw new Error("Two parallel connections?");                                                     // 78
+        }                                                                                                     // 79
                                                                                                               // 80
-    self._clearConnectionTimer();                                                                             // 81
+        self._clearConnectionTimer();                                                                         // 81
                                                                                                               // 82
-    // update status                                                                                          // 83
-    self.currentStatus.status = "connected";                                                                  // 84
-    self.currentStatus.connected = true;                                                                      // 85
-    self.currentStatus.retryCount = 0;                                                                        // 86
-    self.statusChanged();                                                                                     // 87
+        // update status                                                                                      // 83
+        self.currentStatus.status = "connected";                                                              // 84
+        self.currentStatus.connected = true;                                                                  // 85
+        self.currentStatus.retryCount = 0;                                                                    // 86
+        self.statusChanged();                                                                                 // 87
                                                                                                               // 88
-    // fire resets. This must come after status change so that clients                                        // 89
-    // can call send from within a reset callback.                                                            // 90
-    _.each(self.eventCallbacks.reset, function (callback) { callback(); });                                   // 91
-  },                                                                                                          // 92
+        // fire resets. This must come after status change so that clients                                    // 89
+        // can call send from within a reset callback.                                                        // 90
+        _.each(self.eventCallbacks.reset, function (callback) { callback(); });                               // 91
+    },                                                                                                        // 92
                                                                                                               // 93
-  _cleanup: function (maybeError) {                                                                           // 94
-    var self = this;                                                                                          // 95
+    _cleanup: function (maybeError) {                                                                         // 94
+        var self = this;                                                                                      // 95
                                                                                                               // 96
-    self._clearConnectionTimer();                                                                             // 97
-    if (self.client) {                                                                                        // 98
-      var client = self.client;                                                                               // 99
-      self.client = null;                                                                                     // 100
-      client.close();                                                                                         // 101
+        self._clearConnectionTimer();                                                                         // 97
+        if (self.client) {                                                                                    // 98
+            var client = self.client;                                                                         // 99
+            self.client = null;                                                                               // 100
+            client.close();                                                                                   // 101
                                                                                                               // 102
-      _.each(self.eventCallbacks.disconnect, function (callback) {                                            // 103
-        callback(maybeError);                                                                                 // 104
-      });                                                                                                     // 105
-    }                                                                                                         // 106
-  },                                                                                                          // 107
+            _.each(self.eventCallbacks.disconnect, function (callback) {                                      // 103
+                callback(maybeError);                                                                         // 104
+            });                                                                                               // 105
+        }                                                                                                     // 106
+    },                                                                                                        // 107
                                                                                                               // 108
-  _clearConnectionTimer: function () {                                                                        // 109
-    var self = this;                                                                                          // 110
+    _clearConnectionTimer: function () {                                                                      // 109
+        var self = this;                                                                                      // 110
                                                                                                               // 111
-    if (self.connectionTimer) {                                                                               // 112
-      clearTimeout(self.connectionTimer);                                                                     // 113
-      self.connectionTimer = null;                                                                            // 114
-    }                                                                                                         // 115
-  },                                                                                                          // 116
+        if (self.connectionTimer) {                                                                           // 112
+            clearTimeout(self.connectionTimer);                                                               // 113
+            self.connectionTimer = null;                                                                      // 114
+        }                                                                                                     // 115
+    },                                                                                                        // 116
                                                                                                               // 117
-  _getProxyUrl: function (targetUrl) {                                                                        // 118
-    var self = this;                                                                                          // 119
-    // Similar to code in tools/http-helpers.js.                                                              // 120
-    var proxy = process.env.HTTP_PROXY || process.env.http_proxy || null;                                     // 121
-    // if we're going to a secure url, try the https_proxy env variable first.                                // 122
-    if (targetUrl.match(/^wss:/)) {                                                                           // 123
-      proxy = process.env.HTTPS_PROXY || process.env.https_proxy || proxy;                                    // 124
-    }                                                                                                         // 125
-    return proxy;                                                                                             // 126
-  },                                                                                                          // 127
+    _getProxyUrl: function (targetUrl) {                                                                      // 118
+        var self = this;                                                                                      // 119
+        // Similar to code in tools/http-helpers.js.                                                          // 120
+        var proxy = process.env.HTTP_PROXY || process.env.http_proxy || null;                                 // 121
+        // if we're going to a secure url, try the https_proxy env variable first.                            // 122
+        if (targetUrl.match(/^wss:/)) {                                                                       // 123
+            proxy = process.env.HTTPS_PROXY || process.env.https_proxy || proxy;                              // 124
+        }                                                                                                     // 125
+        return proxy;                                                                                         // 126
+    },                                                                                                        // 127
                                                                                                               // 128
-  _launchConnection: function () {                                                                            // 129
-    var self = this;                                                                                          // 130
-    self._cleanup(); // cleanup the old socket, if there was one.                                             // 131
+    _launchConnection: function () {                                                                          // 129
+        var self = this;                                                                                      // 130
+        self._cleanup(); // cleanup the old socket, if there was one.                                         // 131
                                                                                                               // 132
-    // Since server-to-server DDP is still an experimental feature, we only                                   // 133
-    // require the module if we actually create a server-to-server                                            // 134
-    // connection.                                                                                            // 135
-    var NativeWebSocket = require('nativescript-websockets');                                               // 136
-    var targetUrl = toWebsocketUrl(self.endpoint);                                                            // 137
+        // Since server-to-server DDP is still an experimental feature, we only                               // 133
+        // require the module if we actually create a server-to-server                                        // 134
+        // connection.                                                                                        // 135
+        var NativeWebSocket = require('nativescript-websockets');                                           // 136
+        var targetUrl = toWebsocketUrl(self.endpoint);                                                        // 137
                                                                                                               // 138
-    // We would like to specify 'ddp' as the subprotocol here. The npm module we                              // 139
-    // used to use as a client would fail the handshake if we ask for a                                       // 140
-    // subprotocol and the server doesn't send one back (and sockjs doesn't).                                 // 141
-    // Faye doesn't have that behavior; it's unclear from reading RFC 6455 if                                 // 142
-    // Faye is erroneous or not.  So for now, we don't specify protocols.                                     // 143
-    var subprotocols = [];                                                                                    // 144
+        // We would like to specify 'ddp' as the subprotocol here. The npm module we                          // 139
+        // used to use as a client would fail the handshake if we ask for a                                   // 140
+        // subprotocol and the server doesn't send one back (and sockjs doesn't).                             // 141
+        // Faye doesn't have that behavior; it's unclear from reading RFC 6455 if                             // 142
+        // Faye is erroneous or not.  So for now, we don't specify protocols.                                 // 143
+        var subprotocols = [];                                                                                // 144
                                                                                                               // 145
-    var client = self.client = new NativeWebSocket(targetUrl, {                                               // 146
-        timeout: __meteor_runtime_config__.nsSocketTimeout || 6000,                                           // 147
-        allowCellular: true                                                                                   // 148
-    });                                                                                                       // 149
+        var client = self.client = new NativeWebSocket(targetUrl, {                                           // 146
+            timeout: __meteor_runtime_config__.nsSocketTimeout || 6000,                                       // 147
+            allowCellular: true                                                                               // 148
+        });                                                                                                   // 149
                                                                                                               // 150
-    self._clearConnectionTimer();                                                                             // 151
-    self.connectionTimer = Meteor.setTimeout(                                                                 // 152
-      function () {                                                                                           // 153
-        self._lostConnection(                                                                                 // 154
-          new DDP.ConnectionError("DDP connection timed out"));                                               // 155
-      },                                                                                                      // 156
-      self.CONNECT_TIMEOUT);                                                                                  // 157
+        self._clearConnectionTimer();                                                                         // 151
+        self.connectionTimer = Meteor.setTimeout(                                                             // 152
+            function () {                                                                                     // 153
+                self._lostConnection(                                                                         // 154
+                    new DDP.ConnectionError("DDP connection timed out"));                                     // 155
+            },                                                                                                // 156
+            self.CONNECT_TIMEOUT);                                                                            // 157
                                                                                                               // 158
-    self.client.on('open', Meteor.bindEnvironment(function () {                                               // 159
-      return self._onConnect(client);                                                                         // 160
-    }, "stream connect callback"));                                                                           // 161
+        self.client.on('open', Meteor.bindEnvironment(function () {                                           // 159
+            return self._onConnect(client);                                                                   // 160
+        }, "stream connect callback"));                                                                       // 161
                                                                                                               // 162
-    var clientOnIfCurrent = function (event, description, f) {                                                // 163
-      self.client.on(event, Meteor.bindEnvironment(function () {                                              // 164
-        // Ignore events from any connection we've already cleaned up.                                        // 165
-        if (client !== self.client)                                                                           // 166
-          return;                                                                                             // 167
-        f.apply(this, arguments);                                                                             // 168
-      }, description));                                                                                       // 169
-    };                                                                                                        // 170
+        var clientOnIfCurrent = function (event, description, f) {                                            // 163
+            self.client.on(event, Meteor.bindEnvironment(function () {                                        // 164
+                // Ignore events from any connection we've already cleaned up.                                // 165
+                if (client !== self.client)                                                                   // 166
+                    return;                                                                                   // 167
+                f.apply(this, arguments);                                                                     // 168
+            }, description));                                                                                 // 169
+        };                                                                                                    // 170
                                                                                                               // 171
-    clientOnIfCurrent('error', 'stream error callback', function (error) {                                    // 172
-      if (!self.options._dontPrintErrors)                                                                     // 173
-        Meteor._debug("stream error", error.message);                                                         // 174
+        clientOnIfCurrent('error', 'stream error callback', function (error) {                                // 172
+            if (!self.options._dontPrintErrors)                                                               // 173
+                Meteor._debug("stream error", error.message);                                                 // 174
                                                                                                               // 175
-      // Faye's 'error' object is not a JS error (and among other things,                                     // 176
-      // doesn't stringify well). Convert it to one.                                                          // 177
-      self._lostConnection(new DDP.ConnectionError(error.message));                                           // 178
-    });                                                                                                       // 179
+            // Faye's 'error' object is not a JS error (and among other things,                               // 176
+            // doesn't stringify well). Convert it to one.                                                    // 177
+            self._lostConnection(new DDP.ConnectionError(error.message));                                     // 178
+        });                                                                                                   // 179
                                                                                                               // 180
                                                                                                               // 181
-    clientOnIfCurrent('close', 'stream close callback', function () {                                         // 182
-      self._lostConnection();                                                                                 // 183
-    });                                                                                                       // 184
+        clientOnIfCurrent('close', 'stream close callback', function () {                                     // 182
+            self._lostConnection();                                                                           // 183
+        });                                                                                                   // 184
                                                                                                               // 185
                                                                                                               // 186
-    clientOnIfCurrent('message', 'stream message callback', function (socket, message) {                      // 187
-      // Ignore binary frames, where message.data is a Buffer                                                 // 188
-      if (typeof message !== "string")                                                                        // 189
-        return;                                                                                               // 190
+        clientOnIfCurrent('message', 'stream message callback', function (socket, message) {                  // 187
+            // Ignore binary frames, where message.data is a Buffer                                           // 188
+            if (typeof message !== "string")                                                                  // 189
+                return;                                                                                       // 190
                                                                                                               // 191
-      if (__meteor_runtime_config__.nsDebug) {                                                                // 192
-        Meteor._debug("ws <-- ", message);                                                                    // 193
-      }                                                                                                       // 194
-      _.each(self.eventCallbacks.message, function (callback) {                                               // 195
-        callback(message);                                                                                    // 196
-      });                                                                                                     // 197
-    });                                                                                                       // 198
-    // open connection                                                                                        // 199
-    self.client.open();                                                                                       // 200
-  }                                                                                                           // 201
+            if (__meteor_runtime_config__.nsDebug) {                                                          // 192
+                Meteor._debug("ws <-- ", message);                                                            // 193
+            }                                                                                                 // 194
+            _.each(self.eventCallbacks.message, function (callback) {                                         // 195
+                callback(message);                                                                            // 196
+            });                                                                                               // 197
+        });                                                                                                   // 198
+        // open connection                                                                                    // 199
+        self.client.open();                                                                                   // 200
+    }                                                                                                         // 201
 });                                                                                                           // 202
-                                                                                                              // 203
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }).call(this);
@@ -1620,794 +1619,796 @@ _.extend(Connection.prototype, {                                                
   // documents.                                                                                               // 977
   _saveOriginals: function () {                                                                               // 978
     var self = this;                                                                                          // 979
-    _.each(self._stores, function (s) {                                                                       // 980
-      s.saveOriginals();                                                                                      // 981
-    });                                                                                                       // 982
-  },                                                                                                          // 983
-  // Retrieves the original versions of all documents modified by the stub for                                // 984
-  // method 'methodId' from all stores and saves them to _serverDocuments (keyed                              // 985
-  // by document) and _documentsWrittenByStub (keyed by method ID).                                           // 986
-  _retrieveAndStoreOriginals: function (methodId) {                                                           // 987
-    var self = this;                                                                                          // 988
-    if (self._documentsWrittenByStub[methodId])                                                               // 989
-      throw new Error("Duplicate methodId in _retrieveAndStoreOriginals");                                    // 990
-                                                                                                              // 991
-    var docsWritten = [];                                                                                     // 992
-    _.each(self._stores, function (s, collection) {                                                           // 993
-      var originals = s.retrieveOriginals();                                                                  // 994
-      // not all stores define retrieveOriginals                                                              // 995
-      if (!originals)                                                                                         // 996
-        return;                                                                                               // 997
-      originals.forEach(function (doc, id) {                                                                  // 998
-        docsWritten.push({collection: collection, id: id});                                                   // 999
-        if (!_.has(self._serverDocuments, collection))                                                        // 1000
-          self._serverDocuments[collection] = new MongoIDMap;                                                 // 1001
-        var serverDoc = self._serverDocuments[collection].setDefault(id, {});                                 // 1002
-        if (serverDoc.writtenByStubs) {                                                                       // 1003
-          // We're not the first stub to write this doc. Just add our method ID                               // 1004
-          // to the record.                                                                                   // 1005
-          serverDoc.writtenByStubs[methodId] = true;                                                          // 1006
-        } else {                                                                                              // 1007
-          // First stub! Save the original value and our method ID.                                           // 1008
-          serverDoc.document = doc;                                                                           // 1009
-          serverDoc.flushCallbacks = [];                                                                      // 1010
-          serverDoc.writtenByStubs = {};                                                                      // 1011
-          serverDoc.writtenByStubs[methodId] = true;                                                          // 1012
-        }                                                                                                     // 1013
-      });                                                                                                     // 1014
-    });                                                                                                       // 1015
-    if (!_.isEmpty(docsWritten)) {                                                                            // 1016
-      self._documentsWrittenByStub[methodId] = docsWritten;                                                   // 1017
-    }                                                                                                         // 1018
-  },                                                                                                          // 1019
-                                                                                                              // 1020
-  // This is very much a private function we use to make the tests                                            // 1021
-  // take up fewer server resources after they complete.                                                      // 1022
-  _unsubscribeAll: function () {                                                                              // 1023
-    var self = this;                                                                                          // 1024
-    _.each(_.clone(self._subscriptions), function (sub, id) {                                                 // 1025
-      // Avoid killing the autoupdate subscription so that developers                                         // 1026
-      // still get hot code pushes when writing tests.                                                        // 1027
-      //                                                                                                      // 1028
-      // XXX it's a hack to encode knowledge about autoupdate here,                                           // 1029
-      // but it doesn't seem worth it yet to have a special API for                                           // 1030
-      // subscriptions to preserve after unit tests.                                                          // 1031
-      if (sub.name !== 'meteor_autoupdate_clientVersions') {                                                  // 1032
-        self._subscriptions[id].stop();                                                                       // 1033
-      }                                                                                                       // 1034
-    });                                                                                                       // 1035
-  },                                                                                                          // 1036
-                                                                                                              // 1037
-  // Sends the DDP stringification of the given message object                                                // 1038
-  _send: function (obj) {                                                                                     // 1039
-    var self = this;                                                                                          // 1040
-    self._stream.send(DDPCommon.stringifyDDP(obj));                                                           // 1041
-  },                                                                                                          // 1042
-                                                                                                              // 1043
-  // We detected via DDP-level heartbeats that we've lost the                                                 // 1044
-  // connection.  Unlike `disconnect` or `close`, a lost connection                                           // 1045
-  // will be automatically retried.                                                                           // 1046
-  _lostConnection: function (error) {                                                                         // 1047
-    var self = this;                                                                                          // 1048
-    self._stream._lostConnection(error);                                                                      // 1049
-  },                                                                                                          // 1050
-                                                                                                              // 1051
-  /**                                                                                                         // 1052
-   * @summary Get the current connection status. A reactive data source.                                      // 1053
-   * @locus Client                                                                                            // 1054
-   * @memberOf Meteor                                                                                         // 1055
-   * @importFromPackage meteor                                                                                // 1056
-   */                                                                                                         // 1057
-  status: function (/*passthrough args*/) {                                                                   // 1058
-    var self = this;                                                                                          // 1059
-    return self._stream.status.apply(self._stream, arguments);                                                // 1060
-  },                                                                                                          // 1061
-                                                                                                              // 1062
-  /**                                                                                                         // 1063
-   * @summary Force an immediate reconnection attempt if the client is not connected to the server.           // 1064
-                                                                                                              // 1065
-  This method does nothing if the client is already connected.                                                // 1066
-   * @locus Client                                                                                            // 1067
-   * @memberOf Meteor                                                                                         // 1068
-   * @importFromPackage meteor                                                                                // 1069
-   */                                                                                                         // 1070
-  reconnect: function (/*passthrough args*/) {                                                                // 1071
-    var self = this;                                                                                          // 1072
-    return self._stream.reconnect.apply(self._stream, arguments);                                             // 1073
-  },                                                                                                          // 1074
-                                                                                                              // 1075
-  /**                                                                                                         // 1076
-   * @summary Disconnect the client from the server.                                                          // 1077
-   * @locus Client                                                                                            // 1078
-   * @memberOf Meteor                                                                                         // 1079
-   * @importFromPackage meteor                                                                                // 1080
-   */                                                                                                         // 1081
-  disconnect: function (/*passthrough args*/) {                                                               // 1082
-    var self = this;                                                                                          // 1083
-    return self._stream.disconnect.apply(self._stream, arguments);                                            // 1084
-  },                                                                                                          // 1085
-                                                                                                              // 1086
-  close: function () {                                                                                        // 1087
-    var self = this;                                                                                          // 1088
-    return self._stream.disconnect({_permanent: true});                                                       // 1089
-  },                                                                                                          // 1090
-                                                                                                              // 1091
-  ///                                                                                                         // 1092
-  /// Reactive user system                                                                                    // 1093
+    if (!self._waitingForQuiescence())                                                                        // 980
+      self._flushBufferedWrites();                                                                            // 981
+    _.each(self._stores, function (s) {                                                                       // 982
+      s.saveOriginals();                                                                                      // 983
+    });                                                                                                       // 984
+  },                                                                                                          // 985
+  // Retrieves the original versions of all documents modified by the stub for                                // 986
+  // method 'methodId' from all stores and saves them to _serverDocuments (keyed                              // 987
+  // by document) and _documentsWrittenByStub (keyed by method ID).                                           // 988
+  _retrieveAndStoreOriginals: function (methodId) {                                                           // 989
+    var self = this;                                                                                          // 990
+    if (self._documentsWrittenByStub[methodId])                                                               // 991
+      throw new Error("Duplicate methodId in _retrieveAndStoreOriginals");                                    // 992
+                                                                                                              // 993
+    var docsWritten = [];                                                                                     // 994
+    _.each(self._stores, function (s, collection) {                                                           // 995
+      var originals = s.retrieveOriginals();                                                                  // 996
+      // not all stores define retrieveOriginals                                                              // 997
+      if (!originals)                                                                                         // 998
+        return;                                                                                               // 999
+      originals.forEach(function (doc, id) {                                                                  // 1000
+        docsWritten.push({collection: collection, id: id});                                                   // 1001
+        if (!_.has(self._serverDocuments, collection))                                                        // 1002
+          self._serverDocuments[collection] = new MongoIDMap;                                                 // 1003
+        var serverDoc = self._serverDocuments[collection].setDefault(id, {});                                 // 1004
+        if (serverDoc.writtenByStubs) {                                                                       // 1005
+          // We're not the first stub to write this doc. Just add our method ID                               // 1006
+          // to the record.                                                                                   // 1007
+          serverDoc.writtenByStubs[methodId] = true;                                                          // 1008
+        } else {                                                                                              // 1009
+          // First stub! Save the original value and our method ID.                                           // 1010
+          serverDoc.document = doc;                                                                           // 1011
+          serverDoc.flushCallbacks = [];                                                                      // 1012
+          serverDoc.writtenByStubs = {};                                                                      // 1013
+          serverDoc.writtenByStubs[methodId] = true;                                                          // 1014
+        }                                                                                                     // 1015
+      });                                                                                                     // 1016
+    });                                                                                                       // 1017
+    if (!_.isEmpty(docsWritten)) {                                                                            // 1018
+      self._documentsWrittenByStub[methodId] = docsWritten;                                                   // 1019
+    }                                                                                                         // 1020
+  },                                                                                                          // 1021
+                                                                                                              // 1022
+  // This is very much a private function we use to make the tests                                            // 1023
+  // take up fewer server resources after they complete.                                                      // 1024
+  _unsubscribeAll: function () {                                                                              // 1025
+    var self = this;                                                                                          // 1026
+    _.each(_.clone(self._subscriptions), function (sub, id) {                                                 // 1027
+      // Avoid killing the autoupdate subscription so that developers                                         // 1028
+      // still get hot code pushes when writing tests.                                                        // 1029
+      //                                                                                                      // 1030
+      // XXX it's a hack to encode knowledge about autoupdate here,                                           // 1031
+      // but it doesn't seem worth it yet to have a special API for                                           // 1032
+      // subscriptions to preserve after unit tests.                                                          // 1033
+      if (sub.name !== 'meteor_autoupdate_clientVersions') {                                                  // 1034
+        self._subscriptions[id].stop();                                                                       // 1035
+      }                                                                                                       // 1036
+    });                                                                                                       // 1037
+  },                                                                                                          // 1038
+                                                                                                              // 1039
+  // Sends the DDP stringification of the given message object                                                // 1040
+  _send: function (obj) {                                                                                     // 1041
+    var self = this;                                                                                          // 1042
+    self._stream.send(DDPCommon.stringifyDDP(obj));                                                           // 1043
+  },                                                                                                          // 1044
+                                                                                                              // 1045
+  // We detected via DDP-level heartbeats that we've lost the                                                 // 1046
+  // connection.  Unlike `disconnect` or `close`, a lost connection                                           // 1047
+  // will be automatically retried.                                                                           // 1048
+  _lostConnection: function (error) {                                                                         // 1049
+    var self = this;                                                                                          // 1050
+    self._stream._lostConnection(error);                                                                      // 1051
+  },                                                                                                          // 1052
+                                                                                                              // 1053
+  /**                                                                                                         // 1054
+   * @summary Get the current connection status. A reactive data source.                                      // 1055
+   * @locus Client                                                                                            // 1056
+   * @memberOf Meteor                                                                                         // 1057
+   * @importFromPackage meteor                                                                                // 1058
+   */                                                                                                         // 1059
+  status: function (/*passthrough args*/) {                                                                   // 1060
+    var self = this;                                                                                          // 1061
+    return self._stream.status.apply(self._stream, arguments);                                                // 1062
+  },                                                                                                          // 1063
+                                                                                                              // 1064
+  /**                                                                                                         // 1065
+   * @summary Force an immediate reconnection attempt if the client is not connected to the server.           // 1066
+                                                                                                              // 1067
+  This method does nothing if the client is already connected.                                                // 1068
+   * @locus Client                                                                                            // 1069
+   * @memberOf Meteor                                                                                         // 1070
+   * @importFromPackage meteor                                                                                // 1071
+   */                                                                                                         // 1072
+  reconnect: function (/*passthrough args*/) {                                                                // 1073
+    var self = this;                                                                                          // 1074
+    return self._stream.reconnect.apply(self._stream, arguments);                                             // 1075
+  },                                                                                                          // 1076
+                                                                                                              // 1077
+  /**                                                                                                         // 1078
+   * @summary Disconnect the client from the server.                                                          // 1079
+   * @locus Client                                                                                            // 1080
+   * @memberOf Meteor                                                                                         // 1081
+   * @importFromPackage meteor                                                                                // 1082
+   */                                                                                                         // 1083
+  disconnect: function (/*passthrough args*/) {                                                               // 1084
+    var self = this;                                                                                          // 1085
+    return self._stream.disconnect.apply(self._stream, arguments);                                            // 1086
+  },                                                                                                          // 1087
+                                                                                                              // 1088
+  close: function () {                                                                                        // 1089
+    var self = this;                                                                                          // 1090
+    return self._stream.disconnect({_permanent: true});                                                       // 1091
+  },                                                                                                          // 1092
+                                                                                                              // 1093
   ///                                                                                                         // 1094
-  userId: function () {                                                                                       // 1095
-    var self = this;                                                                                          // 1096
-    if (self._userIdDeps)                                                                                     // 1097
-      self._userIdDeps.depend();                                                                              // 1098
-    return self._userId;                                                                                      // 1099
-  },                                                                                                          // 1100
-                                                                                                              // 1101
-  setUserId: function (userId) {                                                                              // 1102
-    var self = this;                                                                                          // 1103
-    // Avoid invalidating dependents if setUserId is called with current value.                               // 1104
-    if (self._userId === userId)                                                                              // 1105
-      return;                                                                                                 // 1106
-    self._userId = userId;                                                                                    // 1107
-    if (self._userIdDeps)                                                                                     // 1108
-      self._userIdDeps.changed();                                                                             // 1109
-  },                                                                                                          // 1110
-                                                                                                              // 1111
-  // Returns true if we are in a state after reconnect of waiting for subs to be                              // 1112
-  // revived or early methods to finish their data, or we are waiting for a                                   // 1113
-  // "wait" method to finish.                                                                                 // 1114
-  _waitingForQuiescence: function () {                                                                        // 1115
-    var self = this;                                                                                          // 1116
-    return (! _.isEmpty(self._subsBeingRevived) ||                                                            // 1117
-            ! _.isEmpty(self._methodsBlockingQuiescence));                                                    // 1118
-  },                                                                                                          // 1119
-                                                                                                              // 1120
-  // Returns true if any method whose message has been sent to the server has                                 // 1121
-  // not yet invoked its user callback.                                                                       // 1122
-  _anyMethodsAreOutstanding: function () {                                                                    // 1123
-    var self = this;                                                                                          // 1124
-    return _.any(_.pluck(self._methodInvokers, 'sentMessage'));                                               // 1125
-  },                                                                                                          // 1126
-                                                                                                              // 1127
-  _livedata_connected: function (msg) {                                                                       // 1128
-    var self = this;                                                                                          // 1129
-                                                                                                              // 1130
-    if (self._version !== 'pre1' && self._heartbeatInterval !== 0) {                                          // 1131
-      self._heartbeat = new DDPCommon.Heartbeat({                                                             // 1132
-        heartbeatInterval: self._heartbeatInterval,                                                           // 1133
-        heartbeatTimeout: self._heartbeatTimeout,                                                             // 1134
-        onTimeout: function () {                                                                              // 1135
-          self._lostConnection(                                                                               // 1136
-            new DDP.ConnectionError("DDP heartbeat timed out"));                                              // 1137
-        },                                                                                                    // 1138
-        sendPing: function () {                                                                               // 1139
-          self._send({msg: 'ping'});                                                                          // 1140
-        }                                                                                                     // 1141
-      });                                                                                                     // 1142
-      self._heartbeat.start();                                                                                // 1143
-    }                                                                                                         // 1144
-                                                                                                              // 1145
-    // If this is a reconnect, we'll have to reset all stores.                                                // 1146
-    if (self._lastSessionId)                                                                                  // 1147
-      self._resetStores = true;                                                                               // 1148
-                                                                                                              // 1149
-    if (typeof (msg.session) === "string") {                                                                  // 1150
-      var reconnectedToPreviousSession = (self._lastSessionId === msg.session);                               // 1151
-      self._lastSessionId = msg.session;                                                                      // 1152
-    }                                                                                                         // 1153
-                                                                                                              // 1154
-    if (reconnectedToPreviousSession) {                                                                       // 1155
-      // Successful reconnection -- pick up where we left off.  Note that right                               // 1156
-      // now, this never happens: the server never connects us to a previous                                  // 1157
-      // session, because DDP doesn't provide enough data for the server to know                              // 1158
-      // what messages the client has processed. We need to improve DDP to make                               // 1159
-      // this possible, at which point we'll probably need more code here.                                    // 1160
-      return;                                                                                                 // 1161
-    }                                                                                                         // 1162
-                                                                                                              // 1163
-    // Server doesn't have our data any more. Re-sync a new session.                                          // 1164
+  /// Reactive user system                                                                                    // 1095
+  ///                                                                                                         // 1096
+  userId: function () {                                                                                       // 1097
+    var self = this;                                                                                          // 1098
+    if (self._userIdDeps)                                                                                     // 1099
+      self._userIdDeps.depend();                                                                              // 1100
+    return self._userId;                                                                                      // 1101
+  },                                                                                                          // 1102
+                                                                                                              // 1103
+  setUserId: function (userId) {                                                                              // 1104
+    var self = this;                                                                                          // 1105
+    // Avoid invalidating dependents if setUserId is called with current value.                               // 1106
+    if (self._userId === userId)                                                                              // 1107
+      return;                                                                                                 // 1108
+    self._userId = userId;                                                                                    // 1109
+    if (self._userIdDeps)                                                                                     // 1110
+      self._userIdDeps.changed();                                                                             // 1111
+  },                                                                                                          // 1112
+                                                                                                              // 1113
+  // Returns true if we are in a state after reconnect of waiting for subs to be                              // 1114
+  // revived or early methods to finish their data, or we are waiting for a                                   // 1115
+  // "wait" method to finish.                                                                                 // 1116
+  _waitingForQuiescence: function () {                                                                        // 1117
+    var self = this;                                                                                          // 1118
+    return (! _.isEmpty(self._subsBeingRevived) ||                                                            // 1119
+            ! _.isEmpty(self._methodsBlockingQuiescence));                                                    // 1120
+  },                                                                                                          // 1121
+                                                                                                              // 1122
+  // Returns true if any method whose message has been sent to the server has                                 // 1123
+  // not yet invoked its user callback.                                                                       // 1124
+  _anyMethodsAreOutstanding: function () {                                                                    // 1125
+    var self = this;                                                                                          // 1126
+    return _.any(_.pluck(self._methodInvokers, 'sentMessage'));                                               // 1127
+  },                                                                                                          // 1128
+                                                                                                              // 1129
+  _livedata_connected: function (msg) {                                                                       // 1130
+    var self = this;                                                                                          // 1131
+                                                                                                              // 1132
+    if (self._version !== 'pre1' && self._heartbeatInterval !== 0) {                                          // 1133
+      self._heartbeat = new DDPCommon.Heartbeat({                                                             // 1134
+        heartbeatInterval: self._heartbeatInterval,                                                           // 1135
+        heartbeatTimeout: self._heartbeatTimeout,                                                             // 1136
+        onTimeout: function () {                                                                              // 1137
+          self._lostConnection(                                                                               // 1138
+            new DDP.ConnectionError("DDP heartbeat timed out"));                                              // 1139
+        },                                                                                                    // 1140
+        sendPing: function () {                                                                               // 1141
+          self._send({msg: 'ping'});                                                                          // 1142
+        }                                                                                                     // 1143
+      });                                                                                                     // 1144
+      self._heartbeat.start();                                                                                // 1145
+    }                                                                                                         // 1146
+                                                                                                              // 1147
+    // If this is a reconnect, we'll have to reset all stores.                                                // 1148
+    if (self._lastSessionId)                                                                                  // 1149
+      self._resetStores = true;                                                                               // 1150
+                                                                                                              // 1151
+    if (typeof (msg.session) === "string") {                                                                  // 1152
+      var reconnectedToPreviousSession = (self._lastSessionId === msg.session);                               // 1153
+      self._lastSessionId = msg.session;                                                                      // 1154
+    }                                                                                                         // 1155
+                                                                                                              // 1156
+    if (reconnectedToPreviousSession) {                                                                       // 1157
+      // Successful reconnection -- pick up where we left off.  Note that right                               // 1158
+      // now, this never happens: the server never connects us to a previous                                  // 1159
+      // session, because DDP doesn't provide enough data for the server to know                              // 1160
+      // what messages the client has processed. We need to improve DDP to make                               // 1161
+      // this possible, at which point we'll probably need more code here.                                    // 1162
+      return;                                                                                                 // 1163
+    }                                                                                                         // 1164
                                                                                                               // 1165
-    // Forget about messages we were buffering for unknown collections. They'll                               // 1166
-    // be resent if still relevant.                                                                           // 1167
-    self._updatesForUnknownStores = {};                                                                       // 1168
-                                                                                                              // 1169
-    if (self._resetStores) {                                                                                  // 1170
-      // Forget about the effects of stubs. We'll be resetting all collections                                // 1171
-      // anyway.                                                                                              // 1172
-      self._documentsWrittenByStub = {};                                                                      // 1173
-      self._serverDocuments = {};                                                                             // 1174
-    }                                                                                                         // 1175
-                                                                                                              // 1176
-    // Clear _afterUpdateCallbacks.                                                                           // 1177
-    self._afterUpdateCallbacks = [];                                                                          // 1178
-                                                                                                              // 1179
-    // Mark all named subscriptions which are ready (ie, we already called the                                // 1180
-    // ready callback) as needing to be revived.                                                              // 1181
-    // XXX We should also block reconnect quiescence until unnamed subscriptions                              // 1182
-    //     (eg, autopublish) are done re-publishing to avoid flicker!                                         // 1183
-    self._subsBeingRevived = {};                                                                              // 1184
-    _.each(self._subscriptions, function (sub, id) {                                                          // 1185
-      if (sub.ready)                                                                                          // 1186
-        self._subsBeingRevived[id] = true;                                                                    // 1187
-    });                                                                                                       // 1188
-                                                                                                              // 1189
-    // Arrange for "half-finished" methods to have their callbacks run, and                                   // 1190
-    // track methods that were sent on this connection so that we don't                                       // 1191
-    // quiesce until they are all done.                                                                       // 1192
-    //                                                                                                        // 1193
-    // Start by clearing _methodsBlockingQuiescence: methods sent before                                      // 1194
-    // reconnect don't matter, and any "wait" methods sent on the new connection                              // 1195
-    // that we drop here will be restored by the loop below.                                                  // 1196
-    self._methodsBlockingQuiescence = {};                                                                     // 1197
-    if (self._resetStores) {                                                                                  // 1198
-      _.each(self._methodInvokers, function (invoker) {                                                       // 1199
-        if (invoker.gotResult()) {                                                                            // 1200
-          // This method already got its result, but it didn't call its callback                              // 1201
-          // because its data didn't become visible. We did not resend the                                    // 1202
-          // method RPC. We'll call its callback when we get a full quiesce,                                  // 1203
-          // since that's as close as we'll get to "data must be visible".                                    // 1204
-          self._afterUpdateCallbacks.push(_.bind(invoker.dataVisible, invoker));                              // 1205
-        } else if (invoker.sentMessage) {                                                                     // 1206
-          // This method has been sent on this connection (maybe as a resend                                  // 1207
-          // from the last connection, maybe from onReconnect, maybe just very                                // 1208
-          // quickly before processing the connected message).                                                // 1209
-          //                                                                                                  // 1210
-          // We don't need to do anything special to ensure its callbacks get                                 // 1211
-          // called, but we'll count it as a method which is preventing                                       // 1212
-          // reconnect quiescence. (eg, it might be a login method that was run                               // 1213
-          // from onReconnect, and we don't want to see flicker by seeing a                                   // 1214
-          // logged-out state.)                                                                               // 1215
-          self._methodsBlockingQuiescence[invoker.methodId] = true;                                           // 1216
-        }                                                                                                     // 1217
-      });                                                                                                     // 1218
-    }                                                                                                         // 1219
-                                                                                                              // 1220
-    self._messagesBufferedUntilQuiescence = [];                                                               // 1221
+    // Server doesn't have our data any more. Re-sync a new session.                                          // 1166
+                                                                                                              // 1167
+    // Forget about messages we were buffering for unknown collections. They'll                               // 1168
+    // be resent if still relevant.                                                                           // 1169
+    self._updatesForUnknownStores = {};                                                                       // 1170
+                                                                                                              // 1171
+    if (self._resetStores) {                                                                                  // 1172
+      // Forget about the effects of stubs. We'll be resetting all collections                                // 1173
+      // anyway.                                                                                              // 1174
+      self._documentsWrittenByStub = {};                                                                      // 1175
+      self._serverDocuments = {};                                                                             // 1176
+    }                                                                                                         // 1177
+                                                                                                              // 1178
+    // Clear _afterUpdateCallbacks.                                                                           // 1179
+    self._afterUpdateCallbacks = [];                                                                          // 1180
+                                                                                                              // 1181
+    // Mark all named subscriptions which are ready (ie, we already called the                                // 1182
+    // ready callback) as needing to be revived.                                                              // 1183
+    // XXX We should also block reconnect quiescence until unnamed subscriptions                              // 1184
+    //     (eg, autopublish) are done re-publishing to avoid flicker!                                         // 1185
+    self._subsBeingRevived = {};                                                                              // 1186
+    _.each(self._subscriptions, function (sub, id) {                                                          // 1187
+      if (sub.ready)                                                                                          // 1188
+        self._subsBeingRevived[id] = true;                                                                    // 1189
+    });                                                                                                       // 1190
+                                                                                                              // 1191
+    // Arrange for "half-finished" methods to have their callbacks run, and                                   // 1192
+    // track methods that were sent on this connection so that we don't                                       // 1193
+    // quiesce until they are all done.                                                                       // 1194
+    //                                                                                                        // 1195
+    // Start by clearing _methodsBlockingQuiescence: methods sent before                                      // 1196
+    // reconnect don't matter, and any "wait" methods sent on the new connection                              // 1197
+    // that we drop here will be restored by the loop below.                                                  // 1198
+    self._methodsBlockingQuiescence = {};                                                                     // 1199
+    if (self._resetStores) {                                                                                  // 1200
+      _.each(self._methodInvokers, function (invoker) {                                                       // 1201
+        if (invoker.gotResult()) {                                                                            // 1202
+          // This method already got its result, but it didn't call its callback                              // 1203
+          // because its data didn't become visible. We did not resend the                                    // 1204
+          // method RPC. We'll call its callback when we get a full quiesce,                                  // 1205
+          // since that's as close as we'll get to "data must be visible".                                    // 1206
+          self._afterUpdateCallbacks.push(_.bind(invoker.dataVisible, invoker));                              // 1207
+        } else if (invoker.sentMessage) {                                                                     // 1208
+          // This method has been sent on this connection (maybe as a resend                                  // 1209
+          // from the last connection, maybe from onReconnect, maybe just very                                // 1210
+          // quickly before processing the connected message).                                                // 1211
+          //                                                                                                  // 1212
+          // We don't need to do anything special to ensure its callbacks get                                 // 1213
+          // called, but we'll count it as a method which is preventing                                       // 1214
+          // reconnect quiescence. (eg, it might be a login method that was run                               // 1215
+          // from onReconnect, and we don't want to see flicker by seeing a                                   // 1216
+          // logged-out state.)                                                                               // 1217
+          self._methodsBlockingQuiescence[invoker.methodId] = true;                                           // 1218
+        }                                                                                                     // 1219
+      });                                                                                                     // 1220
+    }                                                                                                         // 1221
                                                                                                               // 1222
-    // If we're not waiting on any methods or subs, we can reset the stores and                               // 1223
-    // call the callbacks immediately.                                                                        // 1224
-    if (!self._waitingForQuiescence()) {                                                                      // 1225
-      if (self._resetStores) {                                                                                // 1226
-        _.each(self._stores, function (s) {                                                                   // 1227
-          s.beginUpdate(0, true);                                                                             // 1228
-          s.endUpdate();                                                                                      // 1229
-        });                                                                                                   // 1230
-        self._resetStores = false;                                                                            // 1231
-      }                                                                                                       // 1232
-      self._runAfterUpdateCallbacks();                                                                        // 1233
-    }                                                                                                         // 1234
-  },                                                                                                          // 1235
-                                                                                                              // 1236
-                                                                                                              // 1237
-  _processOneDataMessage: function (msg, updates) {                                                           // 1238
-    var self = this;                                                                                          // 1239
-    // Using underscore here so as not to need to capitalize.                                                 // 1240
-    self['_process_' + msg.msg](msg, updates);                                                                // 1241
-  },                                                                                                          // 1242
-                                                                                                              // 1243
-                                                                                                              // 1244
-  _livedata_data: function (msg) {                                                                            // 1245
-    var self = this;                                                                                          // 1246
-                                                                                                              // 1247
-    if (self._waitingForQuiescence()) {                                                                       // 1248
-      self._messagesBufferedUntilQuiescence.push(msg);                                                        // 1249
-                                                                                                              // 1250
-      if (msg.msg === "nosub")                                                                                // 1251
-        delete self._subsBeingRevived[msg.id];                                                                // 1252
-                                                                                                              // 1253
-      _.each(msg.subs || [], function (subId) {                                                               // 1254
-        delete self._subsBeingRevived[subId];                                                                 // 1255
-      });                                                                                                     // 1256
-      _.each(msg.methods || [], function (methodId) {                                                         // 1257
-        delete self._methodsBlockingQuiescence[methodId];                                                     // 1258
-      });                                                                                                     // 1259
-                                                                                                              // 1260
-      if (self._waitingForQuiescence())                                                                       // 1261
-        return;                                                                                               // 1262
-                                                                                                              // 1263
-      // No methods or subs are blocking quiescence!                                                          // 1264
-      // We'll now process and all of our buffered messages, reset all stores,                                // 1265
-      // and apply them all at once.                                                                          // 1266
-      _.each(self._messagesBufferedUntilQuiescence, function (bufferedMsg) {                                  // 1267
-        self._processOneDataMessage(bufferedMsg, self._bufferedWrites);                                       // 1268
-      });                                                                                                     // 1269
-      self._messagesBufferedUntilQuiescence = [];                                                             // 1270
-    } else {                                                                                                  // 1271
-      self._processOneDataMessage(msg, self._bufferedWrites);                                                 // 1272
-    }                                                                                                         // 1273
-                                                                                                              // 1274
-    // Immediately flush writes when:                                                                         // 1275
-    //  1. Buffering is disabled. Or;                                                                         // 1276
-    //  2. any non-(added/changed/removed) message arrives.                                                   // 1277
-    var standardWrite = _.include(['added', 'changed', 'removed'], msg.msg);                                  // 1278
-    if (self._bufferedWritesInterval === 0 || !standardWrite) {                                               // 1279
-      self._flushBufferedWrites();                                                                            // 1280
-      return;                                                                                                 // 1281
-    }                                                                                                         // 1282
-                                                                                                              // 1283
-    if (self._bufferedWritesFlushAt === null) {                                                               // 1284
-      self._bufferedWritesFlushAt = new Date().valueOf() + self._bufferedWritesMaxAge;                        // 1285
-    }                                                                                                         // 1286
-    else if (self._bufferedWritesFlushAt < new Date().valueOf()) {                                            // 1287
-      self._flushBufferedWrites();                                                                            // 1288
-      return;                                                                                                 // 1289
-    }                                                                                                         // 1290
-                                                                                                              // 1291
-    if (self._bufferedWritesFlushHandle) {                                                                    // 1292
-      clearTimeout(self._bufferedWritesFlushHandle);                                                          // 1293
-    }                                                                                                         // 1294
-    self._bufferedWritesFlushHandle = setTimeout(self.__flushBufferedWrites,                                  // 1295
-                                                      self._bufferedWritesInterval);                          // 1296
-  },                                                                                                          // 1297
-                                                                                                              // 1298
-  _flushBufferedWrites: function () {                                                                         // 1299
-    var self = this;                                                                                          // 1300
-    if (self._bufferedWritesFlushHandle) {                                                                    // 1301
-      clearTimeout(self._bufferedWritesFlushHandle);                                                          // 1302
-      self._bufferedWritesFlushHandle = null;                                                                 // 1303
-    }                                                                                                         // 1304
-                                                                                                              // 1305
-    self._bufferedWritesFlushAt = null;                                                                       // 1306
-    // We need to clear the buffer before passing it to                                                       // 1307
-    //  performWrites. As there's no guarantee that it                                                        // 1308
-    //  will exit cleanly.                                                                                    // 1309
-    var writes = self._bufferedWrites;                                                                        // 1310
-    self._bufferedWrites = {};                                                                                // 1311
-    self._performWrites(writes);                                                                              // 1312
-  },                                                                                                          // 1313
-                                                                                                              // 1314
-  _performWrites: function(updates){                                                                          // 1315
-    var self = this;                                                                                          // 1316
-                                                                                                              // 1317
-    if (self._resetStores || !_.isEmpty(updates)) {                                                           // 1318
-      // Begin a transactional update of each store.                                                          // 1319
-      _.each(self._stores, function (s, storeName) {                                                          // 1320
-        s.beginUpdate(_.has(updates, storeName) ? updates[storeName].length : 0,                              // 1321
-                      self._resetStores);                                                                     // 1322
-      });                                                                                                     // 1323
-      self._resetStores = false;                                                                              // 1324
-                                                                                                              // 1325
-      _.each(updates, function (updateMessages, storeName) {                                                  // 1326
-        var store = self._stores[storeName];                                                                  // 1327
-        if (store) {                                                                                          // 1328
-          _.each(updateMessages, function (updateMessage) {                                                   // 1329
-            store.update(updateMessage);                                                                      // 1330
-          });                                                                                                 // 1331
-        } else {                                                                                              // 1332
-          // Nobody's listening for this data. Queue it up until                                              // 1333
-          // someone wants it.                                                                                // 1334
-          // XXX memory use will grow without bound if you forget to                                          // 1335
-          // create a collection or just don't care about it... going                                         // 1336
-          // to have to do something about that.                                                              // 1337
-          if (!_.has(self._updatesForUnknownStores, storeName))                                               // 1338
-            self._updatesForUnknownStores[storeName] = [];                                                    // 1339
-          Array.prototype.push.apply(self._updatesForUnknownStores[storeName],                                // 1340
-                                     updateMessages);                                                         // 1341
-        }                                                                                                     // 1342
-      });                                                                                                     // 1343
-                                                                                                              // 1344
-      // End update transaction.                                                                              // 1345
-      _.each(self._stores, function (s) { s.endUpdate(); });                                                  // 1346
-    }                                                                                                         // 1347
-                                                                                                              // 1348
-    self._runAfterUpdateCallbacks();                                                                          // 1349
-  },                                                                                                          // 1350
-                                                                                                              // 1351
-  // Call any callbacks deferred with _runWhenAllServerDocsAreFlushed whose                                   // 1352
-  // relevant docs have been flushed, as well as dataVisible callbacks at                                     // 1353
-  // reconnect-quiescence time.                                                                               // 1354
-  _runAfterUpdateCallbacks: function () {                                                                     // 1355
-    var self = this;                                                                                          // 1356
-    var callbacks = self._afterUpdateCallbacks;                                                               // 1357
-    self._afterUpdateCallbacks = [];                                                                          // 1358
-    _.each(callbacks, function (c) {                                                                          // 1359
-      c();                                                                                                    // 1360
-    });                                                                                                       // 1361
-  },                                                                                                          // 1362
-                                                                                                              // 1363
-  _pushUpdate: function (updates, collection, msg) {                                                          // 1364
-    var self = this;                                                                                          // 1365
-    if (!_.has(updates, collection)) {                                                                        // 1366
-      updates[collection] = [];                                                                               // 1367
-    }                                                                                                         // 1368
-    updates[collection].push(msg);                                                                            // 1369
-  },                                                                                                          // 1370
-                                                                                                              // 1371
-  _getServerDoc: function (collection, id) {                                                                  // 1372
-    var self = this;                                                                                          // 1373
-    if (!_.has(self._serverDocuments, collection))                                                            // 1374
-      return null;                                                                                            // 1375
-    var serverDocsForCollection = self._serverDocuments[collection];                                          // 1376
-    return serverDocsForCollection.get(id) || null;                                                           // 1377
-  },                                                                                                          // 1378
-                                                                                                              // 1379
-  _process_added: function (msg, updates) {                                                                   // 1380
-    var self = this;                                                                                          // 1381
-    var id = MongoID.idParse(msg.id);                                                                         // 1382
-    var serverDoc = self._getServerDoc(msg.collection, id);                                                   // 1383
-    if (serverDoc) {                                                                                          // 1384
-      // Some outstanding stub wrote here.                                                                    // 1385
-      var isExisting = (serverDoc.document !== undefined);                                                    // 1386
-                                                                                                              // 1387
-      serverDoc.document = msg.fields || {};                                                                  // 1388
-      serverDoc.document._id = id;                                                                            // 1389
-                                                                                                              // 1390
-      if (self._resetStores) {                                                                                // 1391
-        // During reconnect the server is sending adds for existing ids.                                      // 1392
-        // Always push an update so that document stays in the store after                                    // 1393
-        // reset. Use current version of the document for this update, so                                     // 1394
-        // that stub-written values are preserved.                                                            // 1395
-        var currentDoc = self._stores[msg.collection].getDoc(msg.id);                                         // 1396
-        if (currentDoc !== undefined)                                                                         // 1397
-          msg.fields = currentDoc;                                                                            // 1398
-                                                                                                              // 1399
-        self._pushUpdate(updates, msg.collection, msg);                                                       // 1400
-      } else if (isExisting) {                                                                                // 1401
-        throw new Error("Server sent add for existing id: " + msg.id);                                        // 1402
-      }                                                                                                       // 1403
-    } else {                                                                                                  // 1404
-      self._pushUpdate(updates, msg.collection, msg);                                                         // 1405
-    }                                                                                                         // 1406
-  },                                                                                                          // 1407
-                                                                                                              // 1408
-  _process_changed: function (msg, updates) {                                                                 // 1409
-    var self = this;                                                                                          // 1410
-    var serverDoc = self._getServerDoc(                                                                       // 1411
-      msg.collection, MongoID.idParse(msg.id));                                                               // 1412
-    if (serverDoc) {                                                                                          // 1413
-      if (serverDoc.document === undefined)                                                                   // 1414
-        throw new Error("Server sent changed for nonexisting id: " + msg.id);                                 // 1415
-      DiffSequence.applyChanges(serverDoc.document, msg.fields);                                              // 1416
-    } else {                                                                                                  // 1417
-      self._pushUpdate(updates, msg.collection, msg);                                                         // 1418
-    }                                                                                                         // 1419
-  },                                                                                                          // 1420
-                                                                                                              // 1421
-  _process_removed: function (msg, updates) {                                                                 // 1422
-    var self = this;                                                                                          // 1423
-    var serverDoc = self._getServerDoc(                                                                       // 1424
-      msg.collection, MongoID.idParse(msg.id));                                                               // 1425
-    if (serverDoc) {                                                                                          // 1426
-      // Some outstanding stub wrote here.                                                                    // 1427
-      if (serverDoc.document === undefined)                                                                   // 1428
-        throw new Error("Server sent removed for nonexisting id:" + msg.id);                                  // 1429
-      serverDoc.document = undefined;                                                                         // 1430
-    } else {                                                                                                  // 1431
-      self._pushUpdate(updates, msg.collection, {                                                             // 1432
-        msg: 'removed',                                                                                       // 1433
-        collection: msg.collection,                                                                           // 1434
-        id: msg.id                                                                                            // 1435
-      });                                                                                                     // 1436
-    }                                                                                                         // 1437
-  },                                                                                                          // 1438
-                                                                                                              // 1439
-  _process_updated: function (msg, updates) {                                                                 // 1440
-    var self = this;                                                                                          // 1441
-    // Process "method done" messages.                                                                        // 1442
-    _.each(msg.methods, function (methodId) {                                                                 // 1443
-      _.each(self._documentsWrittenByStub[methodId], function (written) {                                     // 1444
-        var serverDoc = self._getServerDoc(written.collection, written.id);                                   // 1445
-        if (!serverDoc)                                                                                       // 1446
-          throw new Error("Lost serverDoc for " + JSON.stringify(written));                                   // 1447
-        if (!serverDoc.writtenByStubs[methodId])                                                              // 1448
-          throw new Error("Doc " + JSON.stringify(written) +                                                  // 1449
-                          " not written by  method " + methodId);                                             // 1450
-        delete serverDoc.writtenByStubs[methodId];                                                            // 1451
-        if (_.isEmpty(serverDoc.writtenByStubs)) {                                                            // 1452
-          // All methods whose stubs wrote this method have completed! We can                                 // 1453
-          // now copy the saved document to the database (reverting the stub's                                // 1454
-          // change if the server did not write to this object, or applying the                               // 1455
-          // server's writes if it did).                                                                      // 1456
-                                                                                                              // 1457
-          // This is a fake ddp 'replace' message.  It's just for talking                                     // 1458
-          // between livedata connections and minimongo.  (We have to stringify                               // 1459
-          // the ID because it's supposed to look like a wire message.)                                       // 1460
-          self._pushUpdate(updates, written.collection, {                                                     // 1461
-            msg: 'replace',                                                                                   // 1462
-            id: MongoID.idStringify(written.id),                                                              // 1463
-            replace: serverDoc.document                                                                       // 1464
-          });                                                                                                 // 1465
-          // Call all flush callbacks.                                                                        // 1466
-          _.each(serverDoc.flushCallbacks, function (c) {                                                     // 1467
-            c();                                                                                              // 1468
-          });                                                                                                 // 1469
-                                                                                                              // 1470
-          // Delete this completed serverDocument. Don't bother to GC empty                                   // 1471
-          // IdMaps inside self._serverDocuments, since there probably aren't                                 // 1472
-          // many collections and they'll be written repeatedly.                                              // 1473
-          self._serverDocuments[written.collection].remove(written.id);                                       // 1474
-        }                                                                                                     // 1475
-      });                                                                                                     // 1476
-      delete self._documentsWrittenByStub[methodId];                                                          // 1477
-                                                                                                              // 1478
-      // We want to call the data-written callback, but we can't do so until all                              // 1479
-      // currently buffered messages are flushed.                                                             // 1480
-      var callbackInvoker = self._methodInvokers[methodId];                                                   // 1481
-      if (!callbackInvoker)                                                                                   // 1482
-        throw new Error("No callback invoker for method " + methodId);                                        // 1483
-      self._runWhenAllServerDocsAreFlushed(                                                                   // 1484
-        _.bind(callbackInvoker.dataVisible, callbackInvoker));                                                // 1485
-    });                                                                                                       // 1486
-  },                                                                                                          // 1487
-                                                                                                              // 1488
-  _process_ready: function (msg, updates) {                                                                   // 1489
-    var self = this;                                                                                          // 1490
-    // Process "sub ready" messages. "sub ready" messages don't take effect                                   // 1491
-    // until all current server documents have been flushed to the local                                      // 1492
-    // database. We can use a write fence to implement this.                                                  // 1493
-    _.each(msg.subs, function (subId) {                                                                       // 1494
-      self._runWhenAllServerDocsAreFlushed(function () {                                                      // 1495
-        var subRecord = self._subscriptions[subId];                                                           // 1496
-        // Did we already unsubscribe?                                                                        // 1497
-        if (!subRecord)                                                                                       // 1498
-          return;                                                                                             // 1499
-        // Did we already receive a ready message? (Oops!)                                                    // 1500
-        if (subRecord.ready)                                                                                  // 1501
-          return;                                                                                             // 1502
-        subRecord.ready = true;                                                                               // 1503
-        subRecord.readyCallback && subRecord.readyCallback();                                                 // 1504
-        subRecord.readyDeps.changed();                                                                        // 1505
-      });                                                                                                     // 1506
-    });                                                                                                       // 1507
-  },                                                                                                          // 1508
-                                                                                                              // 1509
-  // Ensures that "f" will be called after all documents currently in                                         // 1510
-  // _serverDocuments have been written to the local cache. f will not be called                              // 1511
-  // if the connection is lost before then!                                                                   // 1512
-  _runWhenAllServerDocsAreFlushed: function (f) {                                                             // 1513
-    var self = this;                                                                                          // 1514
-    var runFAfterUpdates = function () {                                                                      // 1515
-      self._afterUpdateCallbacks.push(f);                                                                     // 1516
-    };                                                                                                        // 1517
-    var unflushedServerDocCount = 0;                                                                          // 1518
-    var onServerDocFlush = function () {                                                                      // 1519
-      --unflushedServerDocCount;                                                                              // 1520
-      if (unflushedServerDocCount === 0) {                                                                    // 1521
-        // This was the last doc to flush! Arrange to run f after the updates                                 // 1522
-        // have been applied.                                                                                 // 1523
-        runFAfterUpdates();                                                                                   // 1524
-      }                                                                                                       // 1525
-    };                                                                                                        // 1526
-    _.each(self._serverDocuments, function (collectionDocs) {                                                 // 1527
-      collectionDocs.forEach(function (serverDoc) {                                                           // 1528
-        var writtenByStubForAMethodWithSentMessage = _.any(                                                   // 1529
-          serverDoc.writtenByStubs, function (dummy, methodId) {                                              // 1530
-            var invoker = self._methodInvokers[methodId];                                                     // 1531
-            return invoker && invoker.sentMessage;                                                            // 1532
-          });                                                                                                 // 1533
-        if (writtenByStubForAMethodWithSentMessage) {                                                         // 1534
-          ++unflushedServerDocCount;                                                                          // 1535
-          serverDoc.flushCallbacks.push(onServerDocFlush);                                                    // 1536
-        }                                                                                                     // 1537
-      });                                                                                                     // 1538
-    });                                                                                                       // 1539
-    if (unflushedServerDocCount === 0) {                                                                      // 1540
-      // There aren't any buffered docs --- we can call f as soon as the current                              // 1541
-      // round of updates is applied!                                                                         // 1542
-      runFAfterUpdates();                                                                                     // 1543
-    }                                                                                                         // 1544
-  },                                                                                                          // 1545
-                                                                                                              // 1546
-  _livedata_nosub: function (msg) {                                                                           // 1547
-    var self = this;                                                                                          // 1548
-                                                                                                              // 1549
-    // First pass it through _livedata_data, which only uses it to help get                                   // 1550
-    // towards quiescence.                                                                                    // 1551
-    self._livedata_data(msg);                                                                                 // 1552
-                                                                                                              // 1553
-    // Do the rest of our processing immediately, with no                                                     // 1554
-    // buffering-until-quiescence.                                                                            // 1555
-                                                                                                              // 1556
-    // we weren't subbed anyway, or we initiated the unsub.                                                   // 1557
-    if (!_.has(self._subscriptions, msg.id))                                                                  // 1558
-      return;                                                                                                 // 1559
-                                                                                                              // 1560
-    // XXX COMPAT WITH 1.0.3.1 #errorCallback                                                                 // 1561
-    var errorCallback = self._subscriptions[msg.id].errorCallback;                                            // 1562
-    var stopCallback = self._subscriptions[msg.id].stopCallback;                                              // 1563
-                                                                                                              // 1564
-    self._subscriptions[msg.id].remove();                                                                     // 1565
+    self._messagesBufferedUntilQuiescence = [];                                                               // 1223
+                                                                                                              // 1224
+    // If we're not waiting on any methods or subs, we can reset the stores and                               // 1225
+    // call the callbacks immediately.                                                                        // 1226
+    if (!self._waitingForQuiescence()) {                                                                      // 1227
+      if (self._resetStores) {                                                                                // 1228
+        _.each(self._stores, function (s) {                                                                   // 1229
+          s.beginUpdate(0, true);                                                                             // 1230
+          s.endUpdate();                                                                                      // 1231
+        });                                                                                                   // 1232
+        self._resetStores = false;                                                                            // 1233
+      }                                                                                                       // 1234
+      self._runAfterUpdateCallbacks();                                                                        // 1235
+    }                                                                                                         // 1236
+  },                                                                                                          // 1237
+                                                                                                              // 1238
+                                                                                                              // 1239
+  _processOneDataMessage: function (msg, updates) {                                                           // 1240
+    var self = this;                                                                                          // 1241
+    // Using underscore here so as not to need to capitalize.                                                 // 1242
+    self['_process_' + msg.msg](msg, updates);                                                                // 1243
+  },                                                                                                          // 1244
+                                                                                                              // 1245
+                                                                                                              // 1246
+  _livedata_data: function (msg) {                                                                            // 1247
+    var self = this;                                                                                          // 1248
+                                                                                                              // 1249
+    if (self._waitingForQuiescence()) {                                                                       // 1250
+      self._messagesBufferedUntilQuiescence.push(msg);                                                        // 1251
+                                                                                                              // 1252
+      if (msg.msg === "nosub")                                                                                // 1253
+        delete self._subsBeingRevived[msg.id];                                                                // 1254
+                                                                                                              // 1255
+      _.each(msg.subs || [], function (subId) {                                                               // 1256
+        delete self._subsBeingRevived[subId];                                                                 // 1257
+      });                                                                                                     // 1258
+      _.each(msg.methods || [], function (methodId) {                                                         // 1259
+        delete self._methodsBlockingQuiescence[methodId];                                                     // 1260
+      });                                                                                                     // 1261
+                                                                                                              // 1262
+      if (self._waitingForQuiescence())                                                                       // 1263
+        return;                                                                                               // 1264
+                                                                                                              // 1265
+      // No methods or subs are blocking quiescence!                                                          // 1266
+      // We'll now process and all of our buffered messages, reset all stores,                                // 1267
+      // and apply them all at once.                                                                          // 1268
+      _.each(self._messagesBufferedUntilQuiescence, function (bufferedMsg) {                                  // 1269
+        self._processOneDataMessage(bufferedMsg, self._bufferedWrites);                                       // 1270
+      });                                                                                                     // 1271
+      self._messagesBufferedUntilQuiescence = [];                                                             // 1272
+    } else {                                                                                                  // 1273
+      self._processOneDataMessage(msg, self._bufferedWrites);                                                 // 1274
+    }                                                                                                         // 1275
+                                                                                                              // 1276
+    // Immediately flush writes when:                                                                         // 1277
+    //  1. Buffering is disabled. Or;                                                                         // 1278
+    //  2. any non-(added/changed/removed) message arrives.                                                   // 1279
+    var standardWrite = _.include(['added', 'changed', 'removed'], msg.msg);                                  // 1280
+    if (self._bufferedWritesInterval === 0 || !standardWrite) {                                               // 1281
+      self._flushBufferedWrites();                                                                            // 1282
+      return;                                                                                                 // 1283
+    }                                                                                                         // 1284
+                                                                                                              // 1285
+    if (self._bufferedWritesFlushAt === null) {                                                               // 1286
+      self._bufferedWritesFlushAt = new Date().valueOf() + self._bufferedWritesMaxAge;                        // 1287
+    }                                                                                                         // 1288
+    else if (self._bufferedWritesFlushAt < new Date().valueOf()) {                                            // 1289
+      self._flushBufferedWrites();                                                                            // 1290
+      return;                                                                                                 // 1291
+    }                                                                                                         // 1292
+                                                                                                              // 1293
+    if (self._bufferedWritesFlushHandle) {                                                                    // 1294
+      clearTimeout(self._bufferedWritesFlushHandle);                                                          // 1295
+    }                                                                                                         // 1296
+    self._bufferedWritesFlushHandle = setTimeout(self.__flushBufferedWrites,                                  // 1297
+                                                      self._bufferedWritesInterval);                          // 1298
+  },                                                                                                          // 1299
+                                                                                                              // 1300
+  _flushBufferedWrites: function () {                                                                         // 1301
+    var self = this;                                                                                          // 1302
+    if (self._bufferedWritesFlushHandle) {                                                                    // 1303
+      clearTimeout(self._bufferedWritesFlushHandle);                                                          // 1304
+      self._bufferedWritesFlushHandle = null;                                                                 // 1305
+    }                                                                                                         // 1306
+                                                                                                              // 1307
+    self._bufferedWritesFlushAt = null;                                                                       // 1308
+    // We need to clear the buffer before passing it to                                                       // 1309
+    //  performWrites. As there's no guarantee that it                                                        // 1310
+    //  will exit cleanly.                                                                                    // 1311
+    var writes = self._bufferedWrites;                                                                        // 1312
+    self._bufferedWrites = {};                                                                                // 1313
+    self._performWrites(writes);                                                                              // 1314
+  },                                                                                                          // 1315
+                                                                                                              // 1316
+  _performWrites: function(updates){                                                                          // 1317
+    var self = this;                                                                                          // 1318
+                                                                                                              // 1319
+    if (self._resetStores || !_.isEmpty(updates)) {                                                           // 1320
+      // Begin a transactional update of each store.                                                          // 1321
+      _.each(self._stores, function (s, storeName) {                                                          // 1322
+        s.beginUpdate(_.has(updates, storeName) ? updates[storeName].length : 0,                              // 1323
+                      self._resetStores);                                                                     // 1324
+      });                                                                                                     // 1325
+      self._resetStores = false;                                                                              // 1326
+                                                                                                              // 1327
+      _.each(updates, function (updateMessages, storeName) {                                                  // 1328
+        var store = self._stores[storeName];                                                                  // 1329
+        if (store) {                                                                                          // 1330
+          _.each(updateMessages, function (updateMessage) {                                                   // 1331
+            store.update(updateMessage);                                                                      // 1332
+          });                                                                                                 // 1333
+        } else {                                                                                              // 1334
+          // Nobody's listening for this data. Queue it up until                                              // 1335
+          // someone wants it.                                                                                // 1336
+          // XXX memory use will grow without bound if you forget to                                          // 1337
+          // create a collection or just don't care about it... going                                         // 1338
+          // to have to do something about that.                                                              // 1339
+          if (!_.has(self._updatesForUnknownStores, storeName))                                               // 1340
+            self._updatesForUnknownStores[storeName] = [];                                                    // 1341
+          Array.prototype.push.apply(self._updatesForUnknownStores[storeName],                                // 1342
+                                     updateMessages);                                                         // 1343
+        }                                                                                                     // 1344
+      });                                                                                                     // 1345
+                                                                                                              // 1346
+      // End update transaction.                                                                              // 1347
+      _.each(self._stores, function (s) { s.endUpdate(); });                                                  // 1348
+    }                                                                                                         // 1349
+                                                                                                              // 1350
+    self._runAfterUpdateCallbacks();                                                                          // 1351
+  },                                                                                                          // 1352
+                                                                                                              // 1353
+  // Call any callbacks deferred with _runWhenAllServerDocsAreFlushed whose                                   // 1354
+  // relevant docs have been flushed, as well as dataVisible callbacks at                                     // 1355
+  // reconnect-quiescence time.                                                                               // 1356
+  _runAfterUpdateCallbacks: function () {                                                                     // 1357
+    var self = this;                                                                                          // 1358
+    var callbacks = self._afterUpdateCallbacks;                                                               // 1359
+    self._afterUpdateCallbacks = [];                                                                          // 1360
+    _.each(callbacks, function (c) {                                                                          // 1361
+      c();                                                                                                    // 1362
+    });                                                                                                       // 1363
+  },                                                                                                          // 1364
+                                                                                                              // 1365
+  _pushUpdate: function (updates, collection, msg) {                                                          // 1366
+    var self = this;                                                                                          // 1367
+    if (!_.has(updates, collection)) {                                                                        // 1368
+      updates[collection] = [];                                                                               // 1369
+    }                                                                                                         // 1370
+    updates[collection].push(msg);                                                                            // 1371
+  },                                                                                                          // 1372
+                                                                                                              // 1373
+  _getServerDoc: function (collection, id) {                                                                  // 1374
+    var self = this;                                                                                          // 1375
+    if (!_.has(self._serverDocuments, collection))                                                            // 1376
+      return null;                                                                                            // 1377
+    var serverDocsForCollection = self._serverDocuments[collection];                                          // 1378
+    return serverDocsForCollection.get(id) || null;                                                           // 1379
+  },                                                                                                          // 1380
+                                                                                                              // 1381
+  _process_added: function (msg, updates) {                                                                   // 1382
+    var self = this;                                                                                          // 1383
+    var id = MongoID.idParse(msg.id);                                                                         // 1384
+    var serverDoc = self._getServerDoc(msg.collection, id);                                                   // 1385
+    if (serverDoc) {                                                                                          // 1386
+      // Some outstanding stub wrote here.                                                                    // 1387
+      var isExisting = (serverDoc.document !== undefined);                                                    // 1388
+                                                                                                              // 1389
+      serverDoc.document = msg.fields || {};                                                                  // 1390
+      serverDoc.document._id = id;                                                                            // 1391
+                                                                                                              // 1392
+      if (self._resetStores) {                                                                                // 1393
+        // During reconnect the server is sending adds for existing ids.                                      // 1394
+        // Always push an update so that document stays in the store after                                    // 1395
+        // reset. Use current version of the document for this update, so                                     // 1396
+        // that stub-written values are preserved.                                                            // 1397
+        var currentDoc = self._stores[msg.collection].getDoc(msg.id);                                         // 1398
+        if (currentDoc !== undefined)                                                                         // 1399
+          msg.fields = currentDoc;                                                                            // 1400
+                                                                                                              // 1401
+        self._pushUpdate(updates, msg.collection, msg);                                                       // 1402
+      } else if (isExisting) {                                                                                // 1403
+        throw new Error("Server sent add for existing id: " + msg.id);                                        // 1404
+      }                                                                                                       // 1405
+    } else {                                                                                                  // 1406
+      self._pushUpdate(updates, msg.collection, msg);                                                         // 1407
+    }                                                                                                         // 1408
+  },                                                                                                          // 1409
+                                                                                                              // 1410
+  _process_changed: function (msg, updates) {                                                                 // 1411
+    var self = this;                                                                                          // 1412
+    var serverDoc = self._getServerDoc(                                                                       // 1413
+      msg.collection, MongoID.idParse(msg.id));                                                               // 1414
+    if (serverDoc) {                                                                                          // 1415
+      if (serverDoc.document === undefined)                                                                   // 1416
+        throw new Error("Server sent changed for nonexisting id: " + msg.id);                                 // 1417
+      DiffSequence.applyChanges(serverDoc.document, msg.fields);                                              // 1418
+    } else {                                                                                                  // 1419
+      self._pushUpdate(updates, msg.collection, msg);                                                         // 1420
+    }                                                                                                         // 1421
+  },                                                                                                          // 1422
+                                                                                                              // 1423
+  _process_removed: function (msg, updates) {                                                                 // 1424
+    var self = this;                                                                                          // 1425
+    var serverDoc = self._getServerDoc(                                                                       // 1426
+      msg.collection, MongoID.idParse(msg.id));                                                               // 1427
+    if (serverDoc) {                                                                                          // 1428
+      // Some outstanding stub wrote here.                                                                    // 1429
+      if (serverDoc.document === undefined)                                                                   // 1430
+        throw new Error("Server sent removed for nonexisting id:" + msg.id);                                  // 1431
+      serverDoc.document = undefined;                                                                         // 1432
+    } else {                                                                                                  // 1433
+      self._pushUpdate(updates, msg.collection, {                                                             // 1434
+        msg: 'removed',                                                                                       // 1435
+        collection: msg.collection,                                                                           // 1436
+        id: msg.id                                                                                            // 1437
+      });                                                                                                     // 1438
+    }                                                                                                         // 1439
+  },                                                                                                          // 1440
+                                                                                                              // 1441
+  _process_updated: function (msg, updates) {                                                                 // 1442
+    var self = this;                                                                                          // 1443
+    // Process "method done" messages.                                                                        // 1444
+    _.each(msg.methods, function (methodId) {                                                                 // 1445
+      _.each(self._documentsWrittenByStub[methodId], function (written) {                                     // 1446
+        var serverDoc = self._getServerDoc(written.collection, written.id);                                   // 1447
+        if (!serverDoc)                                                                                       // 1448
+          throw new Error("Lost serverDoc for " + JSON.stringify(written));                                   // 1449
+        if (!serverDoc.writtenByStubs[methodId])                                                              // 1450
+          throw new Error("Doc " + JSON.stringify(written) +                                                  // 1451
+                          " not written by  method " + methodId);                                             // 1452
+        delete serverDoc.writtenByStubs[methodId];                                                            // 1453
+        if (_.isEmpty(serverDoc.writtenByStubs)) {                                                            // 1454
+          // All methods whose stubs wrote this method have completed! We can                                 // 1455
+          // now copy the saved document to the database (reverting the stub's                                // 1456
+          // change if the server did not write to this object, or applying the                               // 1457
+          // server's writes if it did).                                                                      // 1458
+                                                                                                              // 1459
+          // This is a fake ddp 'replace' message.  It's just for talking                                     // 1460
+          // between livedata connections and minimongo.  (We have to stringify                               // 1461
+          // the ID because it's supposed to look like a wire message.)                                       // 1462
+          self._pushUpdate(updates, written.collection, {                                                     // 1463
+            msg: 'replace',                                                                                   // 1464
+            id: MongoID.idStringify(written.id),                                                              // 1465
+            replace: serverDoc.document                                                                       // 1466
+          });                                                                                                 // 1467
+          // Call all flush callbacks.                                                                        // 1468
+          _.each(serverDoc.flushCallbacks, function (c) {                                                     // 1469
+            c();                                                                                              // 1470
+          });                                                                                                 // 1471
+                                                                                                              // 1472
+          // Delete this completed serverDocument. Don't bother to GC empty                                   // 1473
+          // IdMaps inside self._serverDocuments, since there probably aren't                                 // 1474
+          // many collections and they'll be written repeatedly.                                              // 1475
+          self._serverDocuments[written.collection].remove(written.id);                                       // 1476
+        }                                                                                                     // 1477
+      });                                                                                                     // 1478
+      delete self._documentsWrittenByStub[methodId];                                                          // 1479
+                                                                                                              // 1480
+      // We want to call the data-written callback, but we can't do so until all                              // 1481
+      // currently buffered messages are flushed.                                                             // 1482
+      var callbackInvoker = self._methodInvokers[methodId];                                                   // 1483
+      if (!callbackInvoker)                                                                                   // 1484
+        throw new Error("No callback invoker for method " + methodId);                                        // 1485
+      self._runWhenAllServerDocsAreFlushed(                                                                   // 1486
+        _.bind(callbackInvoker.dataVisible, callbackInvoker));                                                // 1487
+    });                                                                                                       // 1488
+  },                                                                                                          // 1489
+                                                                                                              // 1490
+  _process_ready: function (msg, updates) {                                                                   // 1491
+    var self = this;                                                                                          // 1492
+    // Process "sub ready" messages. "sub ready" messages don't take effect                                   // 1493
+    // until all current server documents have been flushed to the local                                      // 1494
+    // database. We can use a write fence to implement this.                                                  // 1495
+    _.each(msg.subs, function (subId) {                                                                       // 1496
+      self._runWhenAllServerDocsAreFlushed(function () {                                                      // 1497
+        var subRecord = self._subscriptions[subId];                                                           // 1498
+        // Did we already unsubscribe?                                                                        // 1499
+        if (!subRecord)                                                                                       // 1500
+          return;                                                                                             // 1501
+        // Did we already receive a ready message? (Oops!)                                                    // 1502
+        if (subRecord.ready)                                                                                  // 1503
+          return;                                                                                             // 1504
+        subRecord.ready = true;                                                                               // 1505
+        subRecord.readyCallback && subRecord.readyCallback();                                                 // 1506
+        subRecord.readyDeps.changed();                                                                        // 1507
+      });                                                                                                     // 1508
+    });                                                                                                       // 1509
+  },                                                                                                          // 1510
+                                                                                                              // 1511
+  // Ensures that "f" will be called after all documents currently in                                         // 1512
+  // _serverDocuments have been written to the local cache. f will not be called                              // 1513
+  // if the connection is lost before then!                                                                   // 1514
+  _runWhenAllServerDocsAreFlushed: function (f) {                                                             // 1515
+    var self = this;                                                                                          // 1516
+    var runFAfterUpdates = function () {                                                                      // 1517
+      self._afterUpdateCallbacks.push(f);                                                                     // 1518
+    };                                                                                                        // 1519
+    var unflushedServerDocCount = 0;                                                                          // 1520
+    var onServerDocFlush = function () {                                                                      // 1521
+      --unflushedServerDocCount;                                                                              // 1522
+      if (unflushedServerDocCount === 0) {                                                                    // 1523
+        // This was the last doc to flush! Arrange to run f after the updates                                 // 1524
+        // have been applied.                                                                                 // 1525
+        runFAfterUpdates();                                                                                   // 1526
+      }                                                                                                       // 1527
+    };                                                                                                        // 1528
+    _.each(self._serverDocuments, function (collectionDocs) {                                                 // 1529
+      collectionDocs.forEach(function (serverDoc) {                                                           // 1530
+        var writtenByStubForAMethodWithSentMessage = _.any(                                                   // 1531
+          serverDoc.writtenByStubs, function (dummy, methodId) {                                              // 1532
+            var invoker = self._methodInvokers[methodId];                                                     // 1533
+            return invoker && invoker.sentMessage;                                                            // 1534
+          });                                                                                                 // 1535
+        if (writtenByStubForAMethodWithSentMessage) {                                                         // 1536
+          ++unflushedServerDocCount;                                                                          // 1537
+          serverDoc.flushCallbacks.push(onServerDocFlush);                                                    // 1538
+        }                                                                                                     // 1539
+      });                                                                                                     // 1540
+    });                                                                                                       // 1541
+    if (unflushedServerDocCount === 0) {                                                                      // 1542
+      // There aren't any buffered docs --- we can call f as soon as the current                              // 1543
+      // round of updates is applied!                                                                         // 1544
+      runFAfterUpdates();                                                                                     // 1545
+    }                                                                                                         // 1546
+  },                                                                                                          // 1547
+                                                                                                              // 1548
+  _livedata_nosub: function (msg) {                                                                           // 1549
+    var self = this;                                                                                          // 1550
+                                                                                                              // 1551
+    // First pass it through _livedata_data, which only uses it to help get                                   // 1552
+    // towards quiescence.                                                                                    // 1553
+    self._livedata_data(msg);                                                                                 // 1554
+                                                                                                              // 1555
+    // Do the rest of our processing immediately, with no                                                     // 1556
+    // buffering-until-quiescence.                                                                            // 1557
+                                                                                                              // 1558
+    // we weren't subbed anyway, or we initiated the unsub.                                                   // 1559
+    if (!_.has(self._subscriptions, msg.id))                                                                  // 1560
+      return;                                                                                                 // 1561
+                                                                                                              // 1562
+    // XXX COMPAT WITH 1.0.3.1 #errorCallback                                                                 // 1563
+    var errorCallback = self._subscriptions[msg.id].errorCallback;                                            // 1564
+    var stopCallback = self._subscriptions[msg.id].stopCallback;                                              // 1565
                                                                                                               // 1566
-    var meteorErrorFromMsg = function (msgArg) {                                                              // 1567
-      return msgArg && msgArg.error && new Meteor.Error(                                                      // 1568
-        msgArg.error.error, msgArg.error.reason, msgArg.error.details);                                       // 1569
-    }                                                                                                         // 1570
-                                                                                                              // 1571
-    // XXX COMPAT WITH 1.0.3.1 #errorCallback                                                                 // 1572
-    if (errorCallback && msg.error) {                                                                         // 1573
-      errorCallback(meteorErrorFromMsg(msg));                                                                 // 1574
-    }                                                                                                         // 1575
-                                                                                                              // 1576
-    if (stopCallback) {                                                                                       // 1577
-      stopCallback(meteorErrorFromMsg(msg));                                                                  // 1578
-    }                                                                                                         // 1579
-  },                                                                                                          // 1580
-                                                                                                              // 1581
-  _process_nosub: function () {                                                                               // 1582
-    // This is called as part of the "buffer until quiescence" process, but                                   // 1583
-    // nosub's effect is always immediate. It only goes in the buffer at all                                  // 1584
-    // because it's possible for a nosub to be the thing that triggers                                        // 1585
-    // quiescence, if we were waiting for a sub to be revived and it dies                                     // 1586
-    // instead.                                                                                               // 1587
-  },                                                                                                          // 1588
-                                                                                                              // 1589
-  _livedata_result: function (msg) {                                                                          // 1590
-    // id, result or error. error has error (code), reason, details                                           // 1591
-                                                                                                              // 1592
-    var self = this;                                                                                          // 1593
+    self._subscriptions[msg.id].remove();                                                                     // 1567
+                                                                                                              // 1568
+    var meteorErrorFromMsg = function (msgArg) {                                                              // 1569
+      return msgArg && msgArg.error && new Meteor.Error(                                                      // 1570
+        msgArg.error.error, msgArg.error.reason, msgArg.error.details);                                       // 1571
+    }                                                                                                         // 1572
+                                                                                                              // 1573
+    // XXX COMPAT WITH 1.0.3.1 #errorCallback                                                                 // 1574
+    if (errorCallback && msg.error) {                                                                         // 1575
+      errorCallback(meteorErrorFromMsg(msg));                                                                 // 1576
+    }                                                                                                         // 1577
+                                                                                                              // 1578
+    if (stopCallback) {                                                                                       // 1579
+      stopCallback(meteorErrorFromMsg(msg));                                                                  // 1580
+    }                                                                                                         // 1581
+  },                                                                                                          // 1582
+                                                                                                              // 1583
+  _process_nosub: function () {                                                                               // 1584
+    // This is called as part of the "buffer until quiescence" process, but                                   // 1585
+    // nosub's effect is always immediate. It only goes in the buffer at all                                  // 1586
+    // because it's possible for a nosub to be the thing that triggers                                        // 1587
+    // quiescence, if we were waiting for a sub to be revived and it dies                                     // 1588
+    // instead.                                                                                               // 1589
+  },                                                                                                          // 1590
+                                                                                                              // 1591
+  _livedata_result: function (msg) {                                                                          // 1592
+    // id, result or error. error has error (code), reason, details                                           // 1593
                                                                                                               // 1594
-    // Lets make sure there are no buffered writes before returning result.                                   // 1595
-    if (!_.isEmpty(self._bufferedWrites)) {                                                                   // 1596
-      self._flushBufferedWrites();                                                                            // 1597
-    }                                                                                                         // 1598
-                                                                                                              // 1599
-    // find the outstanding request                                                                           // 1600
-    // should be O(1) in nearly all realistic use cases                                                       // 1601
-    if (_.isEmpty(self._outstandingMethodBlocks)) {                                                           // 1602
-      Meteor._debug("Received method result but no methods outstanding");                                     // 1603
-      return;                                                                                                 // 1604
-    }                                                                                                         // 1605
-    var currentMethodBlock = self._outstandingMethodBlocks[0].methods;                                        // 1606
-    var m;                                                                                                    // 1607
-    for (var i = 0; i < currentMethodBlock.length; i++) {                                                     // 1608
-      m = currentMethodBlock[i];                                                                              // 1609
-      if (m.methodId === msg.id)                                                                              // 1610
-        break;                                                                                                // 1611
-    }                                                                                                         // 1612
-                                                                                                              // 1613
-    if (!m) {                                                                                                 // 1614
-      Meteor._debug("Can't match method response to original method call", msg);                              // 1615
-      return;                                                                                                 // 1616
-    }                                                                                                         // 1617
-                                                                                                              // 1618
-    // Remove from current method block. This may leave the block empty, but we                               // 1619
-    // don't move on to the next block until the callback has been delivered, in                              // 1620
-    // _outstandingMethodFinished.                                                                            // 1621
-    currentMethodBlock.splice(i, 1);                                                                          // 1622
-                                                                                                              // 1623
-    if (_.has(msg, 'error')) {                                                                                // 1624
-      m.receiveResult(new Meteor.Error(                                                                       // 1625
-        msg.error.error, msg.error.reason,                                                                    // 1626
-        msg.error.details));                                                                                  // 1627
-    } else {                                                                                                  // 1628
-      // msg.result may be undefined if the method didn't return a                                            // 1629
-      // value                                                                                                // 1630
-      m.receiveResult(undefined, msg.result);                                                                 // 1631
-    }                                                                                                         // 1632
-  },                                                                                                          // 1633
-                                                                                                              // 1634
-  // Called by MethodInvoker after a method's callback is invoked.  If this was                               // 1635
-  // the last outstanding method in the current block, runs the next block. If                                // 1636
-  // there are no more methods, consider accepting a hot code push.                                           // 1637
-  _outstandingMethodFinished: function () {                                                                   // 1638
-    var self = this;                                                                                          // 1639
-    if (self._anyMethodsAreOutstanding())                                                                     // 1640
-      return;                                                                                                 // 1641
-                                                                                                              // 1642
-    // No methods are outstanding. This should mean that the first block of                                   // 1643
-    // methods is empty. (Or it might not exist, if this was a method that                                    // 1644
-    // half-finished before disconnect/reconnect.)                                                            // 1645
-    if (! _.isEmpty(self._outstandingMethodBlocks)) {                                                         // 1646
-      var firstBlock = self._outstandingMethodBlocks.shift();                                                 // 1647
-      if (! _.isEmpty(firstBlock.methods))                                                                    // 1648
-        throw new Error("No methods outstanding but nonempty block: " +                                       // 1649
-                        JSON.stringify(firstBlock));                                                          // 1650
-                                                                                                              // 1651
-      // Send the outstanding methods now in the first block.                                                 // 1652
-      if (!_.isEmpty(self._outstandingMethodBlocks))                                                          // 1653
-        self._sendOutstandingMethods();                                                                       // 1654
-    }                                                                                                         // 1655
-                                                                                                              // 1656
-    // Maybe accept a hot code push.                                                                          // 1657
-    self._maybeMigrate();                                                                                     // 1658
-  },                                                                                                          // 1659
-                                                                                                              // 1660
-  // Sends messages for all the methods in the first block in                                                 // 1661
-  // _outstandingMethodBlocks.                                                                                // 1662
-  _sendOutstandingMethods: function() {                                                                       // 1663
-    var self = this;                                                                                          // 1664
-    if (_.isEmpty(self._outstandingMethodBlocks))                                                             // 1665
-      return;                                                                                                 // 1666
-    _.each(self._outstandingMethodBlocks[0].methods, function (m) {                                           // 1667
-      m.sendMessage();                                                                                        // 1668
-    });                                                                                                       // 1669
-  },                                                                                                          // 1670
-                                                                                                              // 1671
-  _livedata_error: function (msg) {                                                                           // 1672
-    Meteor._debug("Received error from server: ", msg.reason);                                                // 1673
-    if (msg.offendingMessage)                                                                                 // 1674
-      Meteor._debug("For: ", msg.offendingMessage);                                                           // 1675
-  },                                                                                                          // 1676
-                                                                                                              // 1677
-  _callOnReconnectAndSendAppropriateOutstandingMethods: function() {                                          // 1678
-    var self = this;                                                                                          // 1679
-    var oldOutstandingMethodBlocks = self._outstandingMethodBlocks;                                           // 1680
-    self._outstandingMethodBlocks = [];                                                                       // 1681
-                                                                                                              // 1682
-    self.onReconnect();                                                                                       // 1683
+    var self = this;                                                                                          // 1595
+                                                                                                              // 1596
+    // Lets make sure there are no buffered writes before returning result.                                   // 1597
+    if (!_.isEmpty(self._bufferedWrites)) {                                                                   // 1598
+      self._flushBufferedWrites();                                                                            // 1599
+    }                                                                                                         // 1600
+                                                                                                              // 1601
+    // find the outstanding request                                                                           // 1602
+    // should be O(1) in nearly all realistic use cases                                                       // 1603
+    if (_.isEmpty(self._outstandingMethodBlocks)) {                                                           // 1604
+      Meteor._debug("Received method result but no methods outstanding");                                     // 1605
+      return;                                                                                                 // 1606
+    }                                                                                                         // 1607
+    var currentMethodBlock = self._outstandingMethodBlocks[0].methods;                                        // 1608
+    var m;                                                                                                    // 1609
+    for (var i = 0; i < currentMethodBlock.length; i++) {                                                     // 1610
+      m = currentMethodBlock[i];                                                                              // 1611
+      if (m.methodId === msg.id)                                                                              // 1612
+        break;                                                                                                // 1613
+    }                                                                                                         // 1614
+                                                                                                              // 1615
+    if (!m) {                                                                                                 // 1616
+      Meteor._debug("Can't match method response to original method call", msg);                              // 1617
+      return;                                                                                                 // 1618
+    }                                                                                                         // 1619
+                                                                                                              // 1620
+    // Remove from current method block. This may leave the block empty, but we                               // 1621
+    // don't move on to the next block until the callback has been delivered, in                              // 1622
+    // _outstandingMethodFinished.                                                                            // 1623
+    currentMethodBlock.splice(i, 1);                                                                          // 1624
+                                                                                                              // 1625
+    if (_.has(msg, 'error')) {                                                                                // 1626
+      m.receiveResult(new Meteor.Error(                                                                       // 1627
+        msg.error.error, msg.error.reason,                                                                    // 1628
+        msg.error.details));                                                                                  // 1629
+    } else {                                                                                                  // 1630
+      // msg.result may be undefined if the method didn't return a                                            // 1631
+      // value                                                                                                // 1632
+      m.receiveResult(undefined, msg.result);                                                                 // 1633
+    }                                                                                                         // 1634
+  },                                                                                                          // 1635
+                                                                                                              // 1636
+  // Called by MethodInvoker after a method's callback is invoked.  If this was                               // 1637
+  // the last outstanding method in the current block, runs the next block. If                                // 1638
+  // there are no more methods, consider accepting a hot code push.                                           // 1639
+  _outstandingMethodFinished: function () {                                                                   // 1640
+    var self = this;                                                                                          // 1641
+    if (self._anyMethodsAreOutstanding())                                                                     // 1642
+      return;                                                                                                 // 1643
+                                                                                                              // 1644
+    // No methods are outstanding. This should mean that the first block of                                   // 1645
+    // methods is empty. (Or it might not exist, if this was a method that                                    // 1646
+    // half-finished before disconnect/reconnect.)                                                            // 1647
+    if (! _.isEmpty(self._outstandingMethodBlocks)) {                                                         // 1648
+      var firstBlock = self._outstandingMethodBlocks.shift();                                                 // 1649
+      if (! _.isEmpty(firstBlock.methods))                                                                    // 1650
+        throw new Error("No methods outstanding but nonempty block: " +                                       // 1651
+                        JSON.stringify(firstBlock));                                                          // 1652
+                                                                                                              // 1653
+      // Send the outstanding methods now in the first block.                                                 // 1654
+      if (!_.isEmpty(self._outstandingMethodBlocks))                                                          // 1655
+        self._sendOutstandingMethods();                                                                       // 1656
+    }                                                                                                         // 1657
+                                                                                                              // 1658
+    // Maybe accept a hot code push.                                                                          // 1659
+    self._maybeMigrate();                                                                                     // 1660
+  },                                                                                                          // 1661
+                                                                                                              // 1662
+  // Sends messages for all the methods in the first block in                                                 // 1663
+  // _outstandingMethodBlocks.                                                                                // 1664
+  _sendOutstandingMethods: function() {                                                                       // 1665
+    var self = this;                                                                                          // 1666
+    if (_.isEmpty(self._outstandingMethodBlocks))                                                             // 1667
+      return;                                                                                                 // 1668
+    _.each(self._outstandingMethodBlocks[0].methods, function (m) {                                           // 1669
+      m.sendMessage();                                                                                        // 1670
+    });                                                                                                       // 1671
+  },                                                                                                          // 1672
+                                                                                                              // 1673
+  _livedata_error: function (msg) {                                                                           // 1674
+    Meteor._debug("Received error from server: ", msg.reason);                                                // 1675
+    if (msg.offendingMessage)                                                                                 // 1676
+      Meteor._debug("For: ", msg.offendingMessage);                                                           // 1677
+  },                                                                                                          // 1678
+                                                                                                              // 1679
+  _callOnReconnectAndSendAppropriateOutstandingMethods: function() {                                          // 1680
+    var self = this;                                                                                          // 1681
+    var oldOutstandingMethodBlocks = self._outstandingMethodBlocks;                                           // 1682
+    self._outstandingMethodBlocks = [];                                                                       // 1683
                                                                                                               // 1684
-    if (_.isEmpty(oldOutstandingMethodBlocks))                                                                // 1685
-      return;                                                                                                 // 1686
-                                                                                                              // 1687
-    // We have at least one block worth of old outstanding methods to try                                     // 1688
-    // again. First: did onReconnect actually send anything? If not, we just                                  // 1689
-    // restore all outstanding methods and run the first block.                                               // 1690
-    if (_.isEmpty(self._outstandingMethodBlocks)) {                                                           // 1691
-      self._outstandingMethodBlocks = oldOutstandingMethodBlocks;                                             // 1692
-      self._sendOutstandingMethods();                                                                         // 1693
-      return;                                                                                                 // 1694
-    }                                                                                                         // 1695
-                                                                                                              // 1696
-    // OK, there are blocks on both sides. Special case: merge the last block of                              // 1697
-    // the reconnect methods with the first block of the original methods, if                                 // 1698
-    // neither of them are "wait" blocks.                                                                     // 1699
-    if (!_.last(self._outstandingMethodBlocks).wait &&                                                        // 1700
-        !oldOutstandingMethodBlocks[0].wait) {                                                                // 1701
-      _.each(oldOutstandingMethodBlocks[0].methods, function (m) {                                            // 1702
-        _.last(self._outstandingMethodBlocks).methods.push(m);                                                // 1703
-                                                                                                              // 1704
-        // If this "last block" is also the first block, send the message.                                    // 1705
-        if (self._outstandingMethodBlocks.length === 1)                                                       // 1706
-          m.sendMessage();                                                                                    // 1707
-      });                                                                                                     // 1708
-                                                                                                              // 1709
-      oldOutstandingMethodBlocks.shift();                                                                     // 1710
-    }                                                                                                         // 1711
-                                                                                                              // 1712
-    // Now add the rest of the original blocks on.                                                            // 1713
-    _.each(oldOutstandingMethodBlocks, function (block) {                                                     // 1714
-      self._outstandingMethodBlocks.push(block);                                                              // 1715
-    });                                                                                                       // 1716
-  },                                                                                                          // 1717
-                                                                                                              // 1718
-  // We can accept a hot code push if there are no methods in flight.                                         // 1719
-  _readyToMigrate: function() {                                                                               // 1720
-    var self = this;                                                                                          // 1721
-    return _.isEmpty(self._methodInvokers);                                                                   // 1722
-  },                                                                                                          // 1723
-                                                                                                              // 1724
-  // If we were blocking a migration, see if it's now possible to continue.                                   // 1725
-  // Call whenever the set of outstanding/blocked methods shrinks.                                            // 1726
-  _maybeMigrate: function () {                                                                                // 1727
-    var self = this;                                                                                          // 1728
-    if (self._retryMigrate && self._readyToMigrate()) {                                                       // 1729
-      self._retryMigrate();                                                                                   // 1730
-      self._retryMigrate = null;                                                                              // 1731
-    }                                                                                                         // 1732
-  }                                                                                                           // 1733
-});                                                                                                           // 1734
-                                                                                                              // 1735
-LivedataTest.Connection = Connection;                                                                         // 1736
+    self.onReconnect();                                                                                       // 1685
+                                                                                                              // 1686
+    if (_.isEmpty(oldOutstandingMethodBlocks))                                                                // 1687
+      return;                                                                                                 // 1688
+                                                                                                              // 1689
+    // We have at least one block worth of old outstanding methods to try                                     // 1690
+    // again. First: did onReconnect actually send anything? If not, we just                                  // 1691
+    // restore all outstanding methods and run the first block.                                               // 1692
+    if (_.isEmpty(self._outstandingMethodBlocks)) {                                                           // 1693
+      self._outstandingMethodBlocks = oldOutstandingMethodBlocks;                                             // 1694
+      self._sendOutstandingMethods();                                                                         // 1695
+      return;                                                                                                 // 1696
+    }                                                                                                         // 1697
+                                                                                                              // 1698
+    // OK, there are blocks on both sides. Special case: merge the last block of                              // 1699
+    // the reconnect methods with the first block of the original methods, if                                 // 1700
+    // neither of them are "wait" blocks.                                                                     // 1701
+    if (!_.last(self._outstandingMethodBlocks).wait &&                                                        // 1702
+        !oldOutstandingMethodBlocks[0].wait) {                                                                // 1703
+      _.each(oldOutstandingMethodBlocks[0].methods, function (m) {                                            // 1704
+        _.last(self._outstandingMethodBlocks).methods.push(m);                                                // 1705
+                                                                                                              // 1706
+        // If this "last block" is also the first block, send the message.                                    // 1707
+        if (self._outstandingMethodBlocks.length === 1)                                                       // 1708
+          m.sendMessage();                                                                                    // 1709
+      });                                                                                                     // 1710
+                                                                                                              // 1711
+      oldOutstandingMethodBlocks.shift();                                                                     // 1712
+    }                                                                                                         // 1713
+                                                                                                              // 1714
+    // Now add the rest of the original blocks on.                                                            // 1715
+    _.each(oldOutstandingMethodBlocks, function (block) {                                                     // 1716
+      self._outstandingMethodBlocks.push(block);                                                              // 1717
+    });                                                                                                       // 1718
+  },                                                                                                          // 1719
+                                                                                                              // 1720
+  // We can accept a hot code push if there are no methods in flight.                                         // 1721
+  _readyToMigrate: function() {                                                                               // 1722
+    var self = this;                                                                                          // 1723
+    return _.isEmpty(self._methodInvokers);                                                                   // 1724
+  },                                                                                                          // 1725
+                                                                                                              // 1726
+  // If we were blocking a migration, see if it's now possible to continue.                                   // 1727
+  // Call whenever the set of outstanding/blocked methods shrinks.                                            // 1728
+  _maybeMigrate: function () {                                                                                // 1729
+    var self = this;                                                                                          // 1730
+    if (self._retryMigrate && self._readyToMigrate()) {                                                       // 1731
+      self._retryMigrate();                                                                                   // 1732
+      self._retryMigrate = null;                                                                              // 1733
+    }                                                                                                         // 1734
+  }                                                                                                           // 1735
+});                                                                                                           // 1736
                                                                                                               // 1737
-// @param url {String} URL to Meteor app,                                                                     // 1738
-//     e.g.:                                                                                                  // 1739
-//     "subdomain.meteor.com",                                                                                // 1740
-//     "http://subdomain.meteor.com",                                                                         // 1741
-//     "/",                                                                                                   // 1742
-//     "ddp+sockjs://ddp--****-foo.meteor.com/sockjs"                                                         // 1743
-                                                                                                              // 1744
-/**                                                                                                           // 1745
+LivedataTest.Connection = Connection;                                                                         // 1738
+                                                                                                              // 1739
+// @param url {String} URL to Meteor app,                                                                     // 1740
+//     e.g.:                                                                                                  // 1741
+//     "subdomain.meteor.com",                                                                                // 1742
+//     "http://subdomain.meteor.com",                                                                         // 1743
+//     "/",                                                                                                   // 1744
+//     "ddp+sockjs://ddp--****-foo.meteor.com/sockjs"                                                         // 1745
+                                                                                                              // 1746
+/**                                                                                                           // 1747
  * @summary Connect to the server of a different Meteor application to subscribe to its document sets and invoke its remote methods.
- * @locus Anywhere                                                                                            // 1747
- * @param {String} url The URL of another Meteor application.                                                 // 1748
- */                                                                                                           // 1749
-DDP.connect = function (url, options) {                                                                       // 1750
-  var ret = new Connection(url, options);                                                                     // 1751
-  allConnections.push(ret); // hack. see below.                                                               // 1752
-  return ret;                                                                                                 // 1753
-};                                                                                                            // 1754
-                                                                                                              // 1755
-// Hack for `spiderable` package: a way to see if the page is done                                            // 1756
-// loading all the data it needs.                                                                             // 1757
-//                                                                                                            // 1758
-allConnections = [];                                                                                          // 1759
-DDP._allSubscriptionsReady = function () {                                                                    // 1760
-  return _.all(allConnections, function (conn) {                                                              // 1761
-    return _.all(conn._subscriptions, function (sub) {                                                        // 1762
-      return sub.ready;                                                                                       // 1763
-    });                                                                                                       // 1764
-  });                                                                                                         // 1765
-};                                                                                                            // 1766
-                                                                                                              // 1767
+ * @locus Anywhere                                                                                            // 1749
+ * @param {String} url The URL of another Meteor application.                                                 // 1750
+ */                                                                                                           // 1751
+DDP.connect = function (url, options) {                                                                       // 1752
+  var ret = new Connection(url, options);                                                                     // 1753
+  allConnections.push(ret); // hack. see below.                                                               // 1754
+  return ret;                                                                                                 // 1755
+};                                                                                                            // 1756
+                                                                                                              // 1757
+// Hack for `spiderable` package: a way to see if the page is done                                            // 1758
+// loading all the data it needs.                                                                             // 1759
+//                                                                                                            // 1760
+allConnections = [];                                                                                          // 1761
+DDP._allSubscriptionsReady = function () {                                                                    // 1762
+  return _.all(allConnections, function (conn) {                                                              // 1763
+    return _.all(conn._subscriptions, function (sub) {                                                        // 1764
+      return sub.ready;                                                                                       // 1765
+    });                                                                                                       // 1766
+  });                                                                                                         // 1767
+};                                                                                                            // 1768
+                                                                                                              // 1769
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }).call(this);

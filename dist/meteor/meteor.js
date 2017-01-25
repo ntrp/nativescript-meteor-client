@@ -820,7 +820,7 @@ var loadingCompleted = function () {                                            
     isLoadingCompleted = true;                                                                            // 37
     maybeReady();                                                                                         // 38
   }                                                                                                       // 39
-}                                                                                                         // 40
+};                                                                                                        // 40
                                                                                                           // 41
 setTimeout(loadingCompleted);                                                                             // 42
                                                                                                           // 43

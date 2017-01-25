@@ -1,6 +1,7 @@
 .idea
 scripts
 src
+meteor
 .gitignore
 .gitmodules
 tsconfig.json
