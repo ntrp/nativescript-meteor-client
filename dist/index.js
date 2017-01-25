@@ -1,4 +1,4 @@
 "use strict";
-exports.nsMeteorInit = function (opts) {
+module.exports = function (opts) {
     require('./meteor/index')(opts);
 };

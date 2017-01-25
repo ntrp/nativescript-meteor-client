@@ -3,4 +3,3 @@ export interface NsMeteorOptions {
     debug?: boolean;
     timeout?: number;
 }
-export declare const nsMeteorInit: (opts: NsMeteorOptions) => void;

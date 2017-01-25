@@ -1,4 +1,4 @@
-declare var require;
+declare const require;
 
 export interface NsMeteorOptions {
     url: string;
@@ -6,6 +6,7 @@ export interface NsMeteorOptions {
     timeout?: number;
 }
 
-export const nsMeteorInit = (opts: NsMeteorOptions) => {
+declare var module: any;
+module.exports = (opts: NsMeteorOptions) => {
     require('./meteor/index')(opts);
 };
