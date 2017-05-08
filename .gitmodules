@@ -1,3 +1,0 @@
-[submodule "meteor"]
-	path = meteor
-	url = git@github.com:ntrp/meteor.git

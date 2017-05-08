@@ -89,333 +89,354 @@ makeInstaller = function (options) {                                       // 1
   // caller of makeInstaller wishes to modify Module.prototype.            // 62
   function Module(id) {                                                    // 63
     this.id = id;                                                          // 64
-    this.children = [];                                                    // 65
-  }                                                                        // 66
-                                                                           // 67
-  Module.prototype.resolve = function (id) {                               // 68
-    return this.require.resolve(id);                                       // 69
-  };                                                                       // 70
-                                                                           // 71
-  install.Module = Module;                                                 // 72
-                                                                           // 73
-  function getOwn(obj, key) {                                              // 74
-    return hasOwn.call(obj, key) && obj[key];                              // 75
-  }                                                                        // 76
-                                                                           // 77
-  function isObject(value) {                                               // 78
-    return value && typeof value === "object";                             // 79
-  }                                                                        // 80
-                                                                           // 81
-  function isFunction(value) {                                             // 82
-    return typeof value === "function";                                    // 83
-  }                                                                        // 84
-                                                                           // 85
-  function isString(value) {                                               // 86
-    return typeof value === "string";                                      // 87
-  }                                                                        // 88
-                                                                           // 89
-  function makeRequire(file) {                                             // 90
-    function require(id) {                                                 // 91
-      var result = fileResolve(file, id);                                  // 92
-      if (result) {                                                        // 93
-        return fileEvaluate(result, file.m);                               // 94
-      }                                                                    // 95
-                                                                           // 96
-      var error = new Error("Cannot find module '" + id + "'");            // 97
+                                                                           // 65
+    // The Node implementation of module.children unfortunately includes   // 66
+    // only those child modules that were imported for the first time by   // 67
+    // this parent module (i.e., child.parent === this).                   // 68
+    this.children = [];                                                    // 69
+                                                                           // 70
+    // This object is an install.js extension that includes all child      // 71
+    // modules imported by this module, even if this module is not the     // 72
+    // first to import them.                                               // 73
+    this.childrenById = {};                                                // 74
+  }                                                                        // 75
+                                                                           // 76
+  Module.prototype.resolve = function (id) {                               // 77
+    return this.require.resolve(id);                                       // 78
+  };                                                                       // 79
+                                                                           // 80
+  install.Module = Module;                                                 // 81
+                                                                           // 82
+  function getOwn(obj, key) {                                              // 83
+    return hasOwn.call(obj, key) && obj[key];                              // 84
+  }                                                                        // 85
+                                                                           // 86
+  function isObject(value) {                                               // 87
+    return value && typeof value === "object";                             // 88
+  }                                                                        // 89
+                                                                           // 90
+  function isFunction(value) {                                             // 91
+    return typeof value === "function";                                    // 92
+  }                                                                        // 93
+                                                                           // 94
+  function isString(value) {                                               // 95
+    return typeof value === "string";                                      // 96
+  }                                                                        // 97
                                                                            // 98
-      if (isFunction(fallback)) {                                          // 99
-        return fallback(                                                   // 100
-          id, // The missing module identifier.                            // 101
-          file.m.id, // The path of the requiring file.                    // 102
-          error // The error we would have thrown.                         // 103
-        );                                                                 // 104
-      }                                                                    // 105
-                                                                           // 106
-      throw error;                                                         // 107
-    }                                                                      // 108
-                                                                           // 109
-    if (isFunction(wrapRequire)) {                                         // 110
-      require = wrapRequire(require, file.m.id);                           // 111
-    }                                                                      // 112
-                                                                           // 113
-    require.extensions = fileGetExtensions(file).slice(0);                 // 114
+  function makeRequire(file) {                                             // 99
+    function require(id) {                                                 // 100
+      var result = fileResolve(file, id);                                  // 101
+      if (result) {                                                        // 102
+        return fileEvaluate(result, file.m);                               // 103
+      }                                                                    // 104
+                                                                           // 105
+      var error = new Error("Cannot find module '" + id + "'");            // 106
+                                                                           // 107
+      if (isFunction(fallback)) {                                          // 108
+        return fallback(                                                   // 109
+          id, // The missing module identifier.                            // 110
+          file.m.id, // The path of the requiring file.                    // 111
+          error // The error we would have thrown.                         // 112
+        );                                                                 // 113
+      }                                                                    // 114
                                                                            // 115
-    require.resolve = function (id) {                                      // 116
-      var f = fileResolve(file, id);                                       // 117
-      if (f) return f.m.id;                                                // 118
-      var error = new Error("Cannot find module '" + id + "'");            // 119
-      if (fallback && isFunction(fallback.resolve)) {                      // 120
-        return fallback.resolve(id, file.m.id, error);                     // 121
-      }                                                                    // 122
-      throw error;                                                         // 123
-    };                                                                     // 124
-                                                                           // 125
-    return require;                                                        // 126
-  }                                                                        // 127
-                                                                           // 128
-  // File objects represent either directories or modules that have been   // 129
+      throw error;                                                         // 116
+    }                                                                      // 117
+                                                                           // 118
+    if (isFunction(wrapRequire)) {                                         // 119
+      require = wrapRequire(require, file.m.id);                           // 120
+    }                                                                      // 121
+                                                                           // 122
+    require.extensions = fileGetExtensions(file).slice(0);                 // 123
+                                                                           // 124
+    require.resolve = function (id) {                                      // 125
+      var f = fileResolve(file, id);                                       // 126
+      if (f) return f.m.id;                                                // 127
+      var error = new Error("Cannot find module '" + id + "'");            // 128
+      if (fallback && isFunction(fallback.resolve)) {                      // 129
+        return fallback.resolve(id, file.m.id, error);                     // 130
+      }                                                                    // 131
+      throw error;                                                         // 132
+    };                                                                     // 133
+                                                                           // 134
+    return require;                                                        // 135
+  }                                                                        // 136
+                                                                           // 137
+  // File objects represent either directories or modules that have been   // 138
   // installed. When a `File` respresents a directory, its `.c` (contents)
-  // property is an object containing the names of the files (or           // 131
+  // property is an object containing the names of the files (or           // 140
   // directories) that it contains. When a `File` represents a module, its
-  // `.c` property is a function that can be invoked with the appropriate  // 133
+  // `.c` property is a function that can be invoked with the appropriate  // 142
   // `(require, exports, module)` arguments to evaluate the module. If the
-  // `.c` property is a string, that string will be resolved as a module   // 135
-  // identifier, and the exports of the resulting module will provide the  // 136
+  // `.c` property is a string, that string will be resolved as a module   // 144
+  // identifier, and the exports of the resulting module will provide the  // 145
   // exports of the original file. The `.p` (parent) property of a File is
-  // either a directory `File` or `null`. Note that a child may claim      // 138
-  // another `File` as its parent even if the parent does not have an      // 139
-  // entry for that child in its `.c` object.  This is important for       // 140
+  // either a directory `File` or `null`. Note that a child may claim      // 147
+  // another `File` as its parent even if the parent does not have an      // 148
+  // entry for that child in its `.c` object.  This is important for       // 149
   // implementing anonymous files, and preventing child modules from using
-  // `../relative/identifier` syntax to examine unrelated modules.         // 142
-  function File(name, parent) {                                            // 143
-    var file = this;                                                       // 144
-                                                                           // 145
-    // Link to the parent file.                                            // 146
-    file.p = parent = parent || null;                                      // 147
-                                                                           // 148
-    // The module object for this File, which will eventually boast an     // 149
-    // .exports property when/if the file is evaluated.                    // 150
-    file.m = new Module(name);                                             // 151
-  }                                                                        // 152
-                                                                           // 153
-  function fileEvaluate(file, parentModule) {                              // 154
-    var contents = file && file.c;                                         // 155
-    var module = file.m;                                                   // 156
+  // `../relative/identifier` syntax to examine unrelated modules.         // 151
+  function File(name, parent) {                                            // 152
+    var file = this;                                                       // 153
+                                                                           // 154
+    // Link to the parent file.                                            // 155
+    file.p = parent = parent || null;                                      // 156
                                                                            // 157
-    if (! hasOwn.call(module, "exports")) {                                // 158
-      if (parentModule) {                                                  // 159
-        module.parent = parentModule;                                      // 160
-        var children = parentModule.children;                              // 161
-        if (Array.isArray(children)) {                                     // 162
-          children.push(module);                                           // 163
-        }                                                                  // 164
-      }                                                                    // 165
+    // The module object for this File, which will eventually boast an     // 158
+    // .exports property when/if the file is evaluated.                    // 159
+    file.m = new Module(name);                                             // 160
+  }                                                                        // 161
+                                                                           // 162
+  function fileEvaluate(file, parentModule) {                              // 163
+    var contents = file && file.c;                                         // 164
+    var module = file.m;                                                   // 165
                                                                            // 166
+    if (! hasOwn.call(module, "exports")) {                                // 167
+      if (parentModule) {                                                  // 168
+        module.parent = parentModule;                                      // 169
+        var children = parentModule.children;                              // 170
+        if (Array.isArray(children)) {                                     // 171
+          children.push(module);                                           // 172
+        }                                                                  // 173
+      }                                                                    // 174
+                                                                           // 175
       // If a Module.prototype.useNode method is defined, give it a chance
-      // to define module.exports based on module.id using Node.           // 168
-      if (! isFunction(module.useNode) ||                                  // 169
-          ! module.useNode()) {                                            // 170
-        contents(                                                          // 171
-          module.require = module.require || makeRequire(file),            // 172
-          module.exports = {},                                             // 173
-          module,                                                          // 174
-          file.m.id,                                                       // 175
-          file.p.m.id                                                      // 176
-        );                                                                 // 177
-      }                                                                    // 178
-                                                                           // 179
-      module.loaded = true;                                                // 180
-    }                                                                      // 181
-                                                                           // 182
-    if (isFunction(module.runModuleSetters)) {                             // 183
-      module.runModuleSetters();                                           // 184
-    }                                                                      // 185
-                                                                           // 186
-    return module.exports;                                                 // 187
-  }                                                                        // 188
-                                                                           // 189
-  function fileIsDirectory(file) {                                         // 190
-    return file && isObject(file.c);                                       // 191
-  }                                                                        // 192
-                                                                           // 193
-  function fileMergeContents(file, contents, options) {                    // 194
-    // If contents is an array of strings and functions, return the last   // 195
-    // function with a `.d` property containing all the strings.           // 196
-    if (Array.isArray(contents)) {                                         // 197
-      var deps = [];                                                       // 198
-                                                                           // 199
-      contents.forEach(function (item) {                                   // 200
-        if (isString(item)) {                                              // 201
-          deps.push(item);                                                 // 202
-        } else if (isFunction(item)) {                                     // 203
-          contents = item;                                                 // 204
-        }                                                                  // 205
-      });                                                                  // 206
-                                                                           // 207
-      if (isFunction(contents)) {                                          // 208
-        contents.d = deps;                                                 // 209
-      } else {                                                             // 210
-        // If the array did not contain a function, merge nothing.         // 211
-        contents = null;                                                   // 212
-      }                                                                    // 213
-                                                                           // 214
-    } else if (isFunction(contents)) {                                     // 215
-      // If contents is already a function, make sure it has `.d`.         // 216
-      contents.d = contents.d || [];                                       // 217
-                                                                           // 218
-    } else if (! isString(contents) &&                                     // 219
-               ! isObject(contents)) {                                     // 220
-      // If contents is neither an array nor a function nor a string nor   // 221
-      // an object, just give up and merge nothing.                        // 222
-      contents = null;                                                     // 223
-    }                                                                      // 224
-                                                                           // 225
-    if (contents) {                                                        // 226
-      file.c = file.c || (isObject(contents) ? {} : contents);             // 227
-      if (isObject(contents) && fileIsDirectory(file)) {                   // 228
-        Object.keys(contents).forEach(function (key) {                     // 229
-          if (key === "..") {                                              // 230
-            child = file.p;                                                // 231
-                                                                           // 232
-          } else {                                                         // 233
-            var child = getOwn(file.c, key);                               // 234
-            if (! child) {                                                 // 235
-              child = file.c[key] = new File(                              // 236
-                file.m.id.replace(/\/*$/, "/") + key,                      // 237
-                file                                                       // 238
-              );                                                           // 239
-                                                                           // 240
-              child.o = options;                                           // 241
-            }                                                              // 242
-          }                                                                // 243
-                                                                           // 244
-          fileMergeContents(child, contents[key], options);                // 245
-        });                                                                // 246
-      }                                                                    // 247
-    }                                                                      // 248
-  }                                                                        // 249
-                                                                           // 250
-  function fileGetExtensions(file) {                                       // 251
-    return file.o && file.o.extensions || defaultExtensions;               // 252
-  }                                                                        // 253
-                                                                           // 254
-  function fileAppendIdPart(file, part, extensions) {                      // 255
-    // Always append relative to a directory.                              // 256
-    while (file && ! fileIsDirectory(file)) {                              // 257
-      file = file.p;                                                       // 258
-    }                                                                      // 259
-                                                                           // 260
-    if (! file || ! part || part === ".") {                                // 261
-      return file;                                                         // 262
-    }                                                                      // 263
-                                                                           // 264
-    if (part === "..") {                                                   // 265
-      return file.p;                                                       // 266
-    }                                                                      // 267
-                                                                           // 268
-    var exactChild = getOwn(file.c, part);                                 // 269
-                                                                           // 270
-    // Only consider multiple file extensions if this part is the last     // 271
+      // to define module.exports based on module.id using Node.           // 177
+      if (! isFunction(module.useNode) ||                                  // 178
+          ! module.useNode()) {                                            // 179
+        contents(                                                          // 180
+          module.require = module.require || makeRequire(file),            // 181
+          module.exports = {},                                             // 182
+          module,                                                          // 183
+          file.m.id,                                                       // 184
+          file.p.m.id                                                      // 185
+        );                                                                 // 186
+      }                                                                    // 187
+                                                                           // 188
+      module.loaded = true;                                                // 189
+    }                                                                      // 190
+                                                                           // 191
+    if (isFunction(module.runModuleSetters)) {                             // 192
+      module.runModuleSetters();                                           // 193
+    }                                                                      // 194
+                                                                           // 195
+    return module.exports;                                                 // 196
+  }                                                                        // 197
+                                                                           // 198
+  function fileIsDirectory(file) {                                         // 199
+    return file && isObject(file.c);                                       // 200
+  }                                                                        // 201
+                                                                           // 202
+  function fileMergeContents(file, contents, options) {                    // 203
+    // If contents is an array of strings and functions, return the last   // 204
+    // function with a `.d` property containing all the strings.           // 205
+    if (Array.isArray(contents)) {                                         // 206
+      var deps = [];                                                       // 207
+                                                                           // 208
+      contents.forEach(function (item) {                                   // 209
+        if (isString(item)) {                                              // 210
+          deps.push(item);                                                 // 211
+        } else if (isFunction(item)) {                                     // 212
+          contents = item;                                                 // 213
+        }                                                                  // 214
+      });                                                                  // 215
+                                                                           // 216
+      if (isFunction(contents)) {                                          // 217
+        contents.d = deps;                                                 // 218
+      } else {                                                             // 219
+        // If the array did not contain a function, merge nothing.         // 220
+        contents = null;                                                   // 221
+      }                                                                    // 222
+                                                                           // 223
+    } else if (isFunction(contents)) {                                     // 224
+      // If contents is already a function, make sure it has `.d`.         // 225
+      contents.d = contents.d || [];                                       // 226
+                                                                           // 227
+    } else if (! isString(contents) &&                                     // 228
+               ! isObject(contents)) {                                     // 229
+      // If contents is neither an array nor a function nor a string nor   // 230
+      // an object, just give up and merge nothing.                        // 231
+      contents = null;                                                     // 232
+    }                                                                      // 233
+                                                                           // 234
+    if (contents) {                                                        // 235
+      file.c = file.c || (isObject(contents) ? {} : contents);             // 236
+      if (isObject(contents) && fileIsDirectory(file)) {                   // 237
+        Object.keys(contents).forEach(function (key) {                     // 238
+          if (key === "..") {                                              // 239
+            child = file.p;                                                // 240
+                                                                           // 241
+          } else {                                                         // 242
+            var child = getOwn(file.c, key);                               // 243
+            if (! child) {                                                 // 244
+              child = file.c[key] = new File(                              // 245
+                file.m.id.replace(/\/*$/, "/") + key,                      // 246
+                file                                                       // 247
+              );                                                           // 248
+                                                                           // 249
+              child.o = options;                                           // 250
+            }                                                              // 251
+          }                                                                // 252
+                                                                           // 253
+          fileMergeContents(child, contents[key], options);                // 254
+        });                                                                // 255
+      }                                                                    // 256
+    }                                                                      // 257
+  }                                                                        // 258
+                                                                           // 259
+  function fileGetExtensions(file) {                                       // 260
+    return file.o && file.o.extensions || defaultExtensions;               // 261
+  }                                                                        // 262
+                                                                           // 263
+  function fileAppendIdPart(file, part, extensions) {                      // 264
+    // Always append relative to a directory.                              // 265
+    while (file && ! fileIsDirectory(file)) {                              // 266
+      file = file.p;                                                       // 267
+    }                                                                      // 268
+                                                                           // 269
+    if (! file || ! part || part === ".") {                                // 270
+      return file;                                                         // 271
+    }                                                                      // 272
+                                                                           // 273
+    if (part === "..") {                                                   // 274
+      return file.p;                                                       // 275
+    }                                                                      // 276
+                                                                           // 277
+    var exactChild = getOwn(file.c, part);                                 // 278
+                                                                           // 279
+    // Only consider multiple file extensions if this part is the last     // 280
     // part of a module identifier and not equal to `.` or `..`, and there
-    // was no exact match or the exact match was a directory.              // 273
-    if (extensions && (! exactChild || fileIsDirectory(exactChild))) {     // 274
-      for (var e = 0; e < extensions.length; ++e) {                        // 275
-        var child = getOwn(file.c, part + extensions[e]);                  // 276
-        if (child) {                                                       // 277
-          return child;                                                    // 278
-        }                                                                  // 279
-      }                                                                    // 280
-    }                                                                      // 281
-                                                                           // 282
-    return exactChild;                                                     // 283
-  }                                                                        // 284
-                                                                           // 285
-  function fileAppendId(file, id, extensions) {                            // 286
-    var parts = id.split("/");                                             // 287
-                                                                           // 288
-    // Use `Array.prototype.every` to terminate iteration early if         // 289
-    // `fileAppendIdPart` returns a falsy value.                           // 290
-    parts.every(function (part, i) {                                       // 291
-      return file = i < parts.length - 1                                   // 292
-        ? fileAppendIdPart(file, part)                                     // 293
-        : fileAppendIdPart(file, part, extensions);                        // 294
-    });                                                                    // 295
-                                                                           // 296
-    return file;                                                           // 297
-  }                                                                        // 298
-                                                                           // 299
-  function fileResolve(file, id, seenDirFiles) {                           // 300
-    var extensions = fileGetExtensions(file);                              // 301
-                                                                           // 302
-    file =                                                                 // 303
-      // Absolute module identifiers (i.e. those that begin with a `/`     // 304
-      // character) are interpreted relative to the root directory, which  // 305
-      // is a slight deviation from Node, which has access to the entire   // 306
-      // file system.                                                      // 307
-      id.charAt(0) === "/" ? fileAppendId(root, id, extensions) :          // 308
-      // Relative module identifiers are interpreted relative to the       // 309
-      // current file, naturally.                                          // 310
-      id.charAt(0) === "." ? fileAppendId(file, id, extensions) :          // 311
-      // Top-level module identifiers are interpreted as referring to      // 312
-      // packages in `node_modules` directories.                           // 313
-      nodeModulesLookup(file, id, extensions);                             // 314
+    // was no exact match or the exact match was a directory.              // 282
+    if (extensions && (! exactChild || fileIsDirectory(exactChild))) {     // 283
+      for (var e = 0; e < extensions.length; ++e) {                        // 284
+        var child = getOwn(file.c, part + extensions[e]);                  // 285
+        if (child && ! fileIsDirectory(child)) {                           // 286
+          return child;                                                    // 287
+        }                                                                  // 288
+      }                                                                    // 289
+    }                                                                      // 290
+                                                                           // 291
+    return exactChild;                                                     // 292
+  }                                                                        // 293
+                                                                           // 294
+  function fileAppendId(file, id, extensions) {                            // 295
+    var parts = id.split("/");                                             // 296
+                                                                           // 297
+    // Use `Array.prototype.every` to terminate iteration early if         // 298
+    // `fileAppendIdPart` returns a falsy value.                           // 299
+    parts.every(function (part, i) {                                       // 300
+      return file = i < parts.length - 1                                   // 301
+        ? fileAppendIdPart(file, part)                                     // 302
+        : fileAppendIdPart(file, part, extensions);                        // 303
+    });                                                                    // 304
+                                                                           // 305
+    return file;                                                           // 306
+  }                                                                        // 307
+                                                                           // 308
+  function recordChild(parentModule, childFile) {                          // 309
+    var childModule = childFile && childFile.m;                            // 310
+    if (parentModule && childModule) {                                     // 311
+      parentModule.childrenById[childModule.id] = childModule;             // 312
+    }                                                                      // 313
+  }                                                                        // 314
                                                                            // 315
+  function fileResolve(file, id, parentModule, seenDirFiles) {             // 316
+    var parentModule = parentModule || file.m;                             // 317
+    var extensions = fileGetExtensions(file);                              // 318
+                                                                           // 319
+    file =                                                                 // 320
+      // Absolute module identifiers (i.e. those that begin with a `/`     // 321
+      // character) are interpreted relative to the root directory, which  // 322
+      // is a slight deviation from Node, which has access to the entire   // 323
+      // file system.                                                      // 324
+      id.charAt(0) === "/" ? fileAppendId(root, id, extensions) :          // 325
+      // Relative module identifiers are interpreted relative to the       // 326
+      // current file, naturally.                                          // 327
+      id.charAt(0) === "." ? fileAppendId(file, id, extensions) :          // 328
+      // Top-level module identifiers are interpreted as referring to      // 329
+      // packages in `node_modules` directories.                           // 330
+      nodeModulesLookup(file, id, extensions);                             // 331
+                                                                           // 332
     // If the identifier resolves to a directory, we use the same logic as
-    // Node to find an `index.js` or `package.json` file to evaluate.      // 317
-    while (fileIsDirectory(file)) {                                        // 318
-      seenDirFiles = seenDirFiles || [];                                   // 319
-                                                                           // 320
-      // If the "main" field of a `package.json` file resolves to a        // 321
+    // Node to find an `index.js` or `package.json` file to evaluate.      // 334
+    while (fileIsDirectory(file)) {                                        // 335
+      seenDirFiles = seenDirFiles || [];                                   // 336
+                                                                           // 337
+      // If the "main" field of a `package.json` file resolves to a        // 338
       // directory we've already considered, then we should not attempt to
-      // read the same `package.json` file again. Using an array as a set  // 323
-      // is acceptable here because the number of directories to consider  // 324
-      // is rarely greater than 1 or 2. Also, using indexOf allows us to   // 325
-      // store File objects instead of strings.                            // 326
-      if (seenDirFiles.indexOf(file) < 0) {                                // 327
-        seenDirFiles.push(file);                                           // 328
-                                                                           // 329
-        var pkgJsonFile = fileAppendIdPart(file, "package.json");          // 330
-        var pkg = pkgJsonFile && fileEvaluate(pkgJsonFile), main;          // 331
-        if (pkg && (browser &&                                             // 332
-                    isString(main = pkg.browser) ||                        // 333
-                    isString(main = pkg.main))) {                          // 334
-          // The "main" field of package.json does not have to begin with  // 335
-          // ./ to be considered relative, so first we try simply          // 336
-          // appending it to the directory path before falling back to a   // 337
-          // full fileResolve, which might return a package from a         // 338
-          // node_modules directory.                                       // 339
-          file = fileAppendId(file, main, extensions) ||                   // 340
-            fileResolve(file, main, seenDirFiles);                         // 341
-                                                                           // 342
-          if (file) {                                                      // 343
-            // The fileAppendId call above may have returned a directory,  // 344
-            // so continue the loop to make sure we resolve it to a        // 345
-            // non-directory file.                                         // 346
-            continue;                                                      // 347
-          }                                                                // 348
-        }                                                                  // 349
-      }                                                                    // 350
-                                                                           // 351
-      // If we didn't find a `package.json` file, or it didn't have a      // 352
-      // resolvable `.main` property, the only possibility left to         // 353
-      // consider is that this directory contains an `index.js` module.    // 354
-      // This assignment almost always terminates the while loop, because  // 355
-      // there's very little chance `fileIsDirectory(file)` will be true   // 356
-      // for the result of `fileAppendIdPart(file, "index.js")`. However,  // 357
-      // in principle it is remotely possible that a file called           // 358
-      // `index.js` could be a directory instead of a file.                // 359
-      file = fileAppendIdPart(file, "index.js");                           // 360
-    }                                                                      // 361
-                                                                           // 362
-    if (file && isString(file.c)) {                                        // 363
-      file = fileResolve(file, file.c, seenDirFiles);                      // 364
-    }                                                                      // 365
-                                                                           // 366
-    return file;                                                           // 367
-  };                                                                       // 368
-                                                                           // 369
-  function nodeModulesLookup(file, id, extensions) {                       // 370
-    if (isFunction(override)) {                                            // 371
-      id = override(id, file.m.id);                                        // 372
-    }                                                                      // 373
-                                                                           // 374
-    if (isString(id)) {                                                    // 375
-      for (var resolved; file && ! resolved; file = file.p) {              // 376
-        resolved = fileIsDirectory(file) &&                                // 377
-          fileAppendId(file, "node_modules/" + id, extensions);            // 378
-      }                                                                    // 379
-                                                                           // 380
-      return resolved;                                                     // 381
-    }                                                                      // 382
-  }                                                                        // 383
-                                                                           // 384
-  return install;                                                          // 385
-};                                                                         // 386
+      // read the same `package.json` file again. Using an array as a set  // 340
+      // is acceptable here because the number of directories to consider  // 341
+      // is rarely greater than 1 or 2. Also, using indexOf allows us to   // 342
+      // store File objects instead of strings.                            // 343
+      if (seenDirFiles.indexOf(file) < 0) {                                // 344
+        seenDirFiles.push(file);                                           // 345
+                                                                           // 346
+        var pkgJsonFile = fileAppendIdPart(file, "package.json"), main;    // 347
+        var pkg = pkgJsonFile && fileEvaluate(pkgJsonFile, parentModule);  // 348
+        if (pkg && (browser &&                                             // 349
+                    isString(main = pkg.browser) ||                        // 350
+                    isString(main = pkg.main))) {                          // 351
+          recordChild(parentModule, pkgJsonFile);                          // 352
+                                                                           // 353
+          // The "main" field of package.json does not have to begin with  // 354
+          // ./ to be considered relative, so first we try simply          // 355
+          // appending it to the directory path before falling back to a   // 356
+          // full fileResolve, which might return a package from a         // 357
+          // node_modules directory.                                       // 358
+          file = fileAppendId(file, main, extensions) ||                   // 359
+            fileResolve(file, main, parentModule, seenDirFiles);           // 360
+                                                                           // 361
+          if (file) {                                                      // 362
+            // The fileAppendId call above may have returned a directory,  // 363
+            // so continue the loop to make sure we resolve it to a        // 364
+            // non-directory file.                                         // 365
+            continue;                                                      // 366
+          }                                                                // 367
+        }                                                                  // 368
+      }                                                                    // 369
+                                                                           // 370
+      // If we didn't find a `package.json` file, or it didn't have a      // 371
+      // resolvable `.main` property, the only possibility left to         // 372
+      // consider is that this directory contains an `index.js` module.    // 373
+      // This assignment almost always terminates the while loop, because  // 374
+      // there's very little chance `fileIsDirectory(file)` will be true   // 375
+      // for the result of `fileAppendIdPart(file, "index.js")`. However,  // 376
+      // in principle it is remotely possible that a file called           // 377
+      // `index.js` could be a directory instead of a file.                // 378
+      file = fileAppendIdPart(file, "index.js");                           // 379
+    }                                                                      // 380
+                                                                           // 381
+    if (file && isString(file.c)) {                                        // 382
+      file = fileResolve(file, file.c, parentModule, seenDirFiles);        // 383
+    }                                                                      // 384
+                                                                           // 385
+    recordChild(parentModule, file);                                       // 386
                                                                            // 387
-if (typeof exports === "object") {                                         // 388
-  exports.makeInstaller = makeInstaller;                                   // 389
-}                                                                          // 390
-                                                                           // 391
+    return file;                                                           // 388
+  };                                                                       // 389
+                                                                           // 390
+  function nodeModulesLookup(file, id, extensions) {                       // 391
+    if (isFunction(override)) {                                            // 392
+      id = override(id, file.m.id);                                        // 393
+    }                                                                      // 394
+                                                                           // 395
+    if (isString(id)) {                                                    // 396
+      for (var resolved; file && ! resolved; file = file.p) {              // 397
+        resolved = fileIsDirectory(file) &&                                // 398
+          fileAppendId(file, "node_modules/" + id, extensions);            // 399
+      }                                                                    // 400
+                                                                           // 401
+      return resolved;                                                     // 402
+    }                                                                      // 403
+  }                                                                        // 404
+                                                                           // 405
+  return install;                                                          // 406
+};                                                                         // 407
+                                                                           // 408
+if (typeof exports === "object") {                                         // 409
+  exports.makeInstaller = makeInstaller;                                   // 410
+}                                                                          // 411
+                                                                           // 412
 /////////////////////////////////////////////////////////////////////////////
 
 

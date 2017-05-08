@@ -8,4 +8,5 @@ DDP = Package['ddp-client'].DDP;
 Mongo = Package.mongo.Mongo;
 Tracker = Package.tracker.Tracker;
 Deps = Package.tracker.Deps;
+Accounts = Package['accounts-base'].Accounts;
 
