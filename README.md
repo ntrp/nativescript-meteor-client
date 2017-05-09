@@ -12,7 +12,7 @@ require('nativescript-meteor-client')({
     url: 'http://127.0.0.1:3000',
     debug: true,
     timeout: 5000
-});
+}, require('nativescript-websockets'));
 
 ...
 ```
