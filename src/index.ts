@@ -6,7 +6,7 @@ export interface NsMeteorOptions {
     timeout?: number;
 }
 
-declare var module: any;
-module.exports = (opts: NsMeteorOptions) => {
-    require('./meteor/index')(opts);
+declare const module: any;
+module.exports = (opts: NsMeteorOptions, wsImpl: any) => {
+    require('./meteor/index')(opts, wsImpl);
 };

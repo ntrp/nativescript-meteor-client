@@ -1,4 +1,4 @@
-module.exports = function (opts) {
+module.exports = function (opts, wsImpl) {
     (function () {
         var config = this.__meteor_runtime_config__ || {};
 
@@ -6,7 +6,8 @@ module.exports = function (opts) {
             meteorEnv: {},
             DDP_DEFAULT_CONNECTION_URL: opts.url || 'http://localhost:3000',
             nsDebug: opts.debug,
-            nsSocketTimeout: opts.timeout
+            nsSocketTimeout: opts.timeout,
+            wsImpl: wsImpl
         });
     }).call(that);
 }

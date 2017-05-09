@@ -1,4 +1,5 @@
 "use strict";
-module.exports = function (opts) {
-    require('./meteor/index')(opts);
+Object.defineProperty(exports, "__esModule", { value: true });
+module.exports = function (opts, wsImpl) {
+    require('./meteor/index')(opts, wsImpl);
 };

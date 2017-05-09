@@ -1,6 +1,6 @@
-module.exports = function (opts) {
+module.exports = function (opts, wsImpl) {
     (function () {
-        require('./meteor-runtime-config')(opts);
+        require('./meteor-runtime-config')(opts, wsImpl);
         require('./underscore');
         require('./meteor');
         require('./modules-runtime');
@@ -37,6 +37,6 @@ module.exports = function (opts) {
         require('./global-imports.js');
         require('./service-configuration.js');
     }).call(that);
-}
+};
 
 var that = this;

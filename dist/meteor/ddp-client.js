@@ -228,7 +228,7 @@ LivedataTest.ClientStream = function () {                                       
       // connection.                                                                                                   // 136
                                                                                                                        //
                                                                                                                        //
-      var NativeWebSocket = require('nativescript-websockets');                                                      // 137
+      var NativeWebSocket = __meteor_runtime_config__.wsImpl;                                                      // 137
                                                                                                                        //
       var targetUrl = toWebsocketUrl(self.endpoint); // We would like to specify 'ddp' as the subprotocol here. The npm module we
       // used to use as a client would fail the handshake if we ask for a                                              // 141
