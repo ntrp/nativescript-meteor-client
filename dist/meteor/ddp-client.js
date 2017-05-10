@@ -268,16 +268,16 @@ LivedataTest.ClientStream = function () {                                       
       clientOnIfCurrent('close', 'stream close callback', function () {                                                // 183
         self._lostConnection();                                                                                        // 184
       });                                                                                                              // 185
-      clientOnIfCurrent('message', 'stream message callback', function (message) {                                     // 188
+      clientOnIfCurrent('message', 'stream message callback', function (socket, message) {                             // 188
         // Ignore binary frames, where message.data is a Buffer                                                        // 189
-        if (typeof message.data !== "string") return;                                                                  // 190
+        if (typeof message !== "string") return;                                                                       // 190
                                                                                                                        //
         if (__meteor_runtime_config__.nsDebug) {                                                                       // 193
           Meteor._debug("ws <-- ", message);                                                                           // 194
         }                                                                                                              // 195
                                                                                                                        //
         _.each(self.eventCallbacks.message, function (callback) {                                                      // 197
-          callback(message.data);                                                                                      // 198
+          callback(message);                                                                                           // 198
         });                                                                                                            // 199
       }); // open connection                                                                                           // 200
                                                                                                                        //
