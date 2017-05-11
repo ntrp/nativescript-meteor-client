@@ -484,182 +484,191 @@ Tracker.flush = function (options) {                                            
                       throwFirstError: options && options._throwFirstError });                                        // 456
 };                                                                                                                    // 457
                                                                                                                       // 458
-// Run all pending computations and afterFlush callbacks.  If we were not called                                      // 459
-// directly via Tracker.flush, this may return before they're all done to allow                                       // 460
-// the event loop to run a little before continuing.                                                                  // 461
-Tracker._runFlush = function (options) {                                                                              // 462
-  // XXX What part of the comment below is still true? (We no longer                                                  // 463
-  // have Spark)                                                                                                      // 464
-  //                                                                                                                  // 465
-  // Nested flush could plausibly happen if, say, a flush causes                                                      // 466
-  // DOM mutation, which causes a "blur" event, which runs an                                                         // 467
-  // app event handler that calls Tracker.flush.  At the moment                                                       // 468
-  // Spark blocks event handlers during DOM mutation anyway,                                                          // 469
-  // because the LiveRange tree isn't valid.  And we don't have                                                       // 470
-  // any useful notion of a nested flush.                                                                             // 471
-  //                                                                                                                  // 472
-  // https://app.asana.com/0/159908330244/385138233856                                                                // 473
-  if (inFlush)                                                                                                        // 474
-    throw new Error("Can't call Tracker.flush while flushing");                                                       // 475
-                                                                                                                      // 476
-  if (inCompute)                                                                                                      // 477
-    throw new Error("Can't flush inside Tracker.autorun");                                                            // 478
-                                                                                                                      // 479
-  options = options || {};                                                                                            // 480
-                                                                                                                      // 481
-  inFlush = true;                                                                                                     // 482
-  willFlush = true;                                                                                                   // 483
-  throwFirstError = !! options.throwFirstError;                                                                       // 484
+/**                                                                                                                   // 459
+ * @summary True if we are computing a computation now, either first time or recompute.  This matches Tracker.active unless we are inside Tracker.nonreactive, which nullfies currentComputation even though an enclosing computation may still be running.
+ * @locus Client                                                                                                      // 461
+ * @returns {Boolean}                                                                                                 // 462
+ */                                                                                                                   // 463
+Tracker.inFlush = function () {                                                                                       // 464
+  return inFlush;                                                                                                     // 465
+}                                                                                                                     // 466
+                                                                                                                      // 467
+// Run all pending computations and afterFlush callbacks.  If we were not called                                      // 468
+// directly via Tracker.flush, this may return before they're all done to allow                                       // 469
+// the event loop to run a little before continuing.                                                                  // 470
+Tracker._runFlush = function (options) {                                                                              // 471
+  // XXX What part of the comment below is still true? (We no longer                                                  // 472
+  // have Spark)                                                                                                      // 473
+  //                                                                                                                  // 474
+  // Nested flush could plausibly happen if, say, a flush causes                                                      // 475
+  // DOM mutation, which causes a "blur" event, which runs an                                                         // 476
+  // app event handler that calls Tracker.flush.  At the moment                                                       // 477
+  // Spark blocks event handlers during DOM mutation anyway,                                                          // 478
+  // because the LiveRange tree isn't valid.  And we don't have                                                       // 479
+  // any useful notion of a nested flush.                                                                             // 480
+  //                                                                                                                  // 481
+  // https://app.asana.com/0/159908330244/385138233856                                                                // 482
+  if (Tracker.inFlush())                                                                                              // 483
+    throw new Error("Can't call Tracker.flush while flushing");                                                       // 484
                                                                                                                       // 485
-  var recomputedCount = 0;                                                                                            // 486
-  var finishedTry = false;                                                                                            // 487
-  try {                                                                                                               // 488
-    while (pendingComputations.length ||                                                                              // 489
-           afterFlushCallbacks.length) {                                                                              // 490
-                                                                                                                      // 491
-      // recompute all pending computations                                                                           // 492
-      while (pendingComputations.length) {                                                                            // 493
-        var comp = pendingComputations.shift();                                                                       // 494
-        comp._recompute();                                                                                            // 495
-        if (comp._needsRecompute()) {                                                                                 // 496
-          pendingComputations.unshift(comp);                                                                          // 497
-        }                                                                                                             // 498
-                                                                                                                      // 499
-        if (! options.finishSynchronously && ++recomputedCount > 1000) {                                              // 500
-          finishedTry = true;                                                                                         // 501
-          return;                                                                                                     // 502
-        }                                                                                                             // 503
-      }                                                                                                               // 504
-                                                                                                                      // 505
-      if (afterFlushCallbacks.length) {                                                                               // 506
-        // call one afterFlush callback, which may                                                                    // 507
-        // invalidate more computations                                                                               // 508
-        var func = afterFlushCallbacks.shift();                                                                       // 509
-        try {                                                                                                         // 510
-          func();                                                                                                     // 511
-        } catch (e) {                                                                                                 // 512
-          _throwOrLog("afterFlush", e);                                                                               // 513
-        }                                                                                                             // 514
-      }                                                                                                               // 515
-    }                                                                                                                 // 516
-    finishedTry = true;                                                                                               // 517
-  } finally {                                                                                                         // 518
-    if (! finishedTry) {                                                                                              // 519
-      // we're erroring due to throwFirstError being true.                                                            // 520
-      inFlush = false; // needed before calling `Tracker.flush()` again                                               // 521
-      // finish flushing                                                                                              // 522
-      Tracker._runFlush({                                                                                             // 523
-        finishSynchronously: options.finishSynchronously,                                                             // 524
-        throwFirstError: false                                                                                        // 525
-      });                                                                                                             // 526
-    }                                                                                                                 // 527
-    willFlush = false;                                                                                                // 528
-    inFlush = false;                                                                                                  // 529
-    if (pendingComputations.length || afterFlushCallbacks.length) {                                                   // 530
-      // We're yielding because we ran a bunch of computations and we aren't                                          // 531
-      // required to finish synchronously, so we'd like to give the event loop a                                      // 532
-      // chance. We should flush again soon.                                                                          // 533
-      if (options.finishSynchronously) {                                                                              // 534
-        throw new Error("still have more to do?");  // shouldn't happen                                               // 535
-      }                                                                                                               // 536
-      setTimeout(requireFlush, 10);                                                                                   // 537
-    }                                                                                                                 // 538
-  }                                                                                                                   // 539
-};                                                                                                                    // 540
-                                                                                                                      // 541
-// http://docs.meteor.com/#tracker_autorun                                                                            // 542
-//                                                                                                                    // 543
-// Run f(). Record its dependencies. Rerun it whenever the                                                            // 544
-// dependencies change.                                                                                               // 545
-//                                                                                                                    // 546
-// Returns a new Computation, which is also passed to f.                                                              // 547
-//                                                                                                                    // 548
-// Links the computation to the current computation                                                                   // 549
-// so that it is stopped if the current computation is invalidated.                                                   // 550
-                                                                                                                      // 551
-/**                                                                                                                   // 552
- * @callback Tracker.ComputationFunction                                                                              // 553
- * @param {Tracker.Computation}                                                                                       // 554
- */                                                                                                                   // 555
-/**                                                                                                                   // 556
- * @summary Run a function now and rerun it later whenever its dependencies                                           // 557
- * change. Returns a Computation object that can be used to stop or observe the                                       // 558
- * rerunning.                                                                                                         // 559
- * @locus Client                                                                                                      // 560
- * @param {Tracker.ComputationFunction} runFunc The function to run. It receives                                      // 561
- * one argument: the Computation object that will be returned.                                                        // 562
- * @param {Object} [options]                                                                                          // 563
- * @param {Function} options.onError Optional. The function to run when an error                                      // 564
- * happens in the Computation. The only argument it recieves is the Error                                             // 565
- * thrown. Defaults to the error being logged to the console.                                                         // 566
- * @returns {Tracker.Computation}                                                                                     // 567
- */                                                                                                                   // 568
-Tracker.autorun = function (f, options) {                                                                             // 569
-  if (typeof f !== 'function')                                                                                        // 570
-    throw new Error('Tracker.autorun requires a function argument');                                                  // 571
-                                                                                                                      // 572
-  options = options || {};                                                                                            // 573
-                                                                                                                      // 574
-  constructingComputation = true;                                                                                     // 575
-  var c = new Tracker.Computation(                                                                                    // 576
-    f, Tracker.currentComputation, options.onError);                                                                  // 577
-                                                                                                                      // 578
-  if (Tracker.active)                                                                                                 // 579
-    Tracker.onInvalidate(function () {                                                                                // 580
-      c.stop();                                                                                                       // 581
-    });                                                                                                               // 582
+  if (inCompute)                                                                                                      // 486
+    throw new Error("Can't flush inside Tracker.autorun");                                                            // 487
+                                                                                                                      // 488
+  options = options || {};                                                                                            // 489
+                                                                                                                      // 490
+  inFlush = true;                                                                                                     // 491
+  willFlush = true;                                                                                                   // 492
+  throwFirstError = !! options.throwFirstError;                                                                       // 493
+                                                                                                                      // 494
+  var recomputedCount = 0;                                                                                            // 495
+  var finishedTry = false;                                                                                            // 496
+  try {                                                                                                               // 497
+    while (pendingComputations.length ||                                                                              // 498
+           afterFlushCallbacks.length) {                                                                              // 499
+                                                                                                                      // 500
+      // recompute all pending computations                                                                           // 501
+      while (pendingComputations.length) {                                                                            // 502
+        var comp = pendingComputations.shift();                                                                       // 503
+        comp._recompute();                                                                                            // 504
+        if (comp._needsRecompute()) {                                                                                 // 505
+          pendingComputations.unshift(comp);                                                                          // 506
+        }                                                                                                             // 507
+                                                                                                                      // 508
+        if (! options.finishSynchronously && ++recomputedCount > 1000) {                                              // 509
+          finishedTry = true;                                                                                         // 510
+          return;                                                                                                     // 511
+        }                                                                                                             // 512
+      }                                                                                                               // 513
+                                                                                                                      // 514
+      if (afterFlushCallbacks.length) {                                                                               // 515
+        // call one afterFlush callback, which may                                                                    // 516
+        // invalidate more computations                                                                               // 517
+        var func = afterFlushCallbacks.shift();                                                                       // 518
+        try {                                                                                                         // 519
+          func();                                                                                                     // 520
+        } catch (e) {                                                                                                 // 521
+          _throwOrLog("afterFlush", e);                                                                               // 522
+        }                                                                                                             // 523
+      }                                                                                                               // 524
+    }                                                                                                                 // 525
+    finishedTry = true;                                                                                               // 526
+  } finally {                                                                                                         // 527
+    if (! finishedTry) {                                                                                              // 528
+      // we're erroring due to throwFirstError being true.                                                            // 529
+      inFlush = false; // needed before calling `Tracker.flush()` again                                               // 530
+      // finish flushing                                                                                              // 531
+      Tracker._runFlush({                                                                                             // 532
+        finishSynchronously: options.finishSynchronously,                                                             // 533
+        throwFirstError: false                                                                                        // 534
+      });                                                                                                             // 535
+    }                                                                                                                 // 536
+    willFlush = false;                                                                                                // 537
+    inFlush = false;                                                                                                  // 538
+    if (pendingComputations.length || afterFlushCallbacks.length) {                                                   // 539
+      // We're yielding because we ran a bunch of computations and we aren't                                          // 540
+      // required to finish synchronously, so we'd like to give the event loop a                                      // 541
+      // chance. We should flush again soon.                                                                          // 542
+      if (options.finishSynchronously) {                                                                              // 543
+        throw new Error("still have more to do?");  // shouldn't happen                                               // 544
+      }                                                                                                               // 545
+      setTimeout(requireFlush, 10);                                                                                   // 546
+    }                                                                                                                 // 547
+  }                                                                                                                   // 548
+};                                                                                                                    // 549
+                                                                                                                      // 550
+// http://docs.meteor.com/#tracker_autorun                                                                            // 551
+//                                                                                                                    // 552
+// Run f(). Record its dependencies. Rerun it whenever the                                                            // 553
+// dependencies change.                                                                                               // 554
+//                                                                                                                    // 555
+// Returns a new Computation, which is also passed to f.                                                              // 556
+//                                                                                                                    // 557
+// Links the computation to the current computation                                                                   // 558
+// so that it is stopped if the current computation is invalidated.                                                   // 559
+                                                                                                                      // 560
+/**                                                                                                                   // 561
+ * @callback Tracker.ComputationFunction                                                                              // 562
+ * @param {Tracker.Computation}                                                                                       // 563
+ */                                                                                                                   // 564
+/**                                                                                                                   // 565
+ * @summary Run a function now and rerun it later whenever its dependencies                                           // 566
+ * change. Returns a Computation object that can be used to stop or observe the                                       // 567
+ * rerunning.                                                                                                         // 568
+ * @locus Client                                                                                                      // 569
+ * @param {Tracker.ComputationFunction} runFunc The function to run. It receives                                      // 570
+ * one argument: the Computation object that will be returned.                                                        // 571
+ * @param {Object} [options]                                                                                          // 572
+ * @param {Function} options.onError Optional. The function to run when an error                                      // 573
+ * happens in the Computation. The only argument it receives is the Error                                             // 574
+ * thrown. Defaults to the error being logged to the console.                                                         // 575
+ * @returns {Tracker.Computation}                                                                                     // 576
+ */                                                                                                                   // 577
+Tracker.autorun = function (f, options) {                                                                             // 578
+  if (typeof f !== 'function')                                                                                        // 579
+    throw new Error('Tracker.autorun requires a function argument');                                                  // 580
+                                                                                                                      // 581
+  options = options || {};                                                                                            // 582
                                                                                                                       // 583
-  return c;                                                                                                           // 584
-};                                                                                                                    // 585
-                                                                                                                      // 586
-// http://docs.meteor.com/#tracker_nonreactive                                                                        // 587
-//                                                                                                                    // 588
-// Run `f` with no current computation, returning the return value                                                    // 589
-// of `f`.  Used to turn off reactivity for the duration of `f`,                                                      // 590
-// so that reactive data sources accessed by `f` will not result in any                                               // 591
-// computations being invalidated.                                                                                    // 592
-                                                                                                                      // 593
-/**                                                                                                                   // 594
- * @summary Run a function without tracking dependencies.                                                             // 595
- * @locus Client                                                                                                      // 596
- * @param {Function} func A function to call immediately.                                                             // 597
- */                                                                                                                   // 598
-Tracker.nonreactive = function (f) {                                                                                  // 599
-  var previous = Tracker.currentComputation;                                                                          // 600
-  setCurrentComputation(null);                                                                                        // 601
-  try {                                                                                                               // 602
-    return f();                                                                                                       // 603
-  } finally {                                                                                                         // 604
-    setCurrentComputation(previous);                                                                                  // 605
-  }                                                                                                                   // 606
-};                                                                                                                    // 607
-                                                                                                                      // 608
-// http://docs.meteor.com/#tracker_oninvalidate                                                                       // 609
-                                                                                                                      // 610
-/**                                                                                                                   // 611
- * @summary Registers a new [`onInvalidate`](#computation_oninvalidate) callback on the current computation (which must exist), to be called immediately when the current computation is invalidated or stopped.
- * @locus Client                                                                                                      // 613
- * @param {Function} callback A callback function that will be invoked as `func(c)`, where `c` is the computation on which the callback is registered.
- */                                                                                                                   // 615
-Tracker.onInvalidate = function (f) {                                                                                 // 616
-  if (! Tracker.active)                                                                                               // 617
-    throw new Error("Tracker.onInvalidate requires a currentComputation");                                            // 618
+  constructingComputation = true;                                                                                     // 584
+  var c = new Tracker.Computation(                                                                                    // 585
+    f, Tracker.currentComputation, options.onError);                                                                  // 586
+                                                                                                                      // 587
+  if (Tracker.active)                                                                                                 // 588
+    Tracker.onInvalidate(function () {                                                                                // 589
+      c.stop();                                                                                                       // 590
+    });                                                                                                               // 591
+                                                                                                                      // 592
+  return c;                                                                                                           // 593
+};                                                                                                                    // 594
+                                                                                                                      // 595
+// http://docs.meteor.com/#tracker_nonreactive                                                                        // 596
+//                                                                                                                    // 597
+// Run `f` with no current computation, returning the return value                                                    // 598
+// of `f`.  Used to turn off reactivity for the duration of `f`,                                                      // 599
+// so that reactive data sources accessed by `f` will not result in any                                               // 600
+// computations being invalidated.                                                                                    // 601
+                                                                                                                      // 602
+/**                                                                                                                   // 603
+ * @summary Run a function without tracking dependencies.                                                             // 604
+ * @locus Client                                                                                                      // 605
+ * @param {Function} func A function to call immediately.                                                             // 606
+ */                                                                                                                   // 607
+Tracker.nonreactive = function (f) {                                                                                  // 608
+  var previous = Tracker.currentComputation;                                                                          // 609
+  setCurrentComputation(null);                                                                                        // 610
+  try {                                                                                                               // 611
+    return f();                                                                                                       // 612
+  } finally {                                                                                                         // 613
+    setCurrentComputation(previous);                                                                                  // 614
+  }                                                                                                                   // 615
+};                                                                                                                    // 616
+                                                                                                                      // 617
+// http://docs.meteor.com/#tracker_oninvalidate                                                                       // 618
                                                                                                                       // 619
-  Tracker.currentComputation.onInvalidate(f);                                                                         // 620
-};                                                                                                                    // 621
-                                                                                                                      // 622
-// http://docs.meteor.com/#tracker_afterflush                                                                         // 623
-                                                                                                                      // 624
-/**                                                                                                                   // 625
+/**                                                                                                                   // 620
+ * @summary Registers a new [`onInvalidate`](#computation_oninvalidate) callback on the current computation (which must exist), to be called immediately when the current computation is invalidated or stopped.
+ * @locus Client                                                                                                      // 622
+ * @param {Function} callback A callback function that will be invoked as `func(c)`, where `c` is the computation on which the callback is registered.
+ */                                                                                                                   // 624
+Tracker.onInvalidate = function (f) {                                                                                 // 625
+  if (! Tracker.active)                                                                                               // 626
+    throw new Error("Tracker.onInvalidate requires a currentComputation");                                            // 627
+                                                                                                                      // 628
+  Tracker.currentComputation.onInvalidate(f);                                                                         // 629
+};                                                                                                                    // 630
+                                                                                                                      // 631
+// http://docs.meteor.com/#tracker_afterflush                                                                         // 632
+                                                                                                                      // 633
+/**                                                                                                                   // 634
  * @summary Schedules a function to be called during the next flush, or later in the current flush if one is in progress, after all invalidated computations have been rerun.  The function will be run once and not on subsequent flushes unless `afterFlush` is called again.
- * @locus Client                                                                                                      // 627
- * @param {Function} callback A function to call at flush time.                                                       // 628
- */                                                                                                                   // 629
-Tracker.afterFlush = function (f) {                                                                                   // 630
-  afterFlushCallbacks.push(f);                                                                                        // 631
-  requireFlush();                                                                                                     // 632
-};                                                                                                                    // 633
-                                                                                                                      // 634
+ * @locus Client                                                                                                      // 636
+ * @param {Function} callback A function to call at flush time.                                                       // 637
+ */                                                                                                                   // 638
+Tracker.afterFlush = function (f) {                                                                                   // 639
+  afterFlushCallbacks.push(f);                                                                                        // 640
+  requireFlush();                                                                                                     // 641
+};                                                                                                                    // 642
+                                                                                                                      // 643
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }).call(this);

@@ -20,7 +20,7 @@ var meteorInstall = Package['modules-runtime'].meteorInstall;
 /* Package-scope variables */
 var Buffer, process;
 
-var require = meteorInstall({"node_modules":{"meteor":{"modules":{"client.js":["./install-packages.js","./stubs.js","./buffer.js","./process.js","reify/lib/runtime","./css",function(require,exports,module){
+var require = meteorInstall({"node_modules":{"meteor":{"modules":{"client.js":["./install-packages.js","./stubs.js","./buffer.js","./process.js","./reify.js","./css",function(require,exports){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                     //
@@ -32,7 +32,7 @@ require("./install-packages.js");                                               
 require("./stubs.js");                                                                                                 // 2
 require("./buffer.js");                                                                                                // 3
 require("./process.js");                                                                                               // 4
-require("reify/lib/runtime").enable(module.constructor);                                                               // 5
+require("./reify.js");                                                                                                 // 5
                                                                                                                        // 6
 exports.addStyles = require("./css").addStyles;                                                                        // 7
                                                                                                                        // 8
@@ -123,7 +123,7 @@ install("id-map");                                                              
 install("ddp-common");                                                                                                 // 48
 install("diff-sequence");                                                                                              // 49
 install("mongo-id");                                                                                                   // 50
-install("ddp-client");                                                                                                 // 51
+install("ddp-client", "meteor/ddp-client/namespace.js");                                                               // 51
 install("ddp");                                                                                                        // 52
 install("ordered-dict");                                                                                               // 53
 install("geojson-utils", "meteor/geojson-utils/main.js");                                                              // 54
@@ -131,7 +131,16 @@ install("minimongo");                                                           
 install("ddp-server");                                                                                                 // 56
 install("allow-deny");                                                                                                 // 57
 install("mongo");                                                                                                      // 58
-                                                                                                                       // 59
+install("ddp-rate-limiter");                                                                                           // 59
+install("localstorage");                                                                                               // 60
+install("callback-hook");                                                                                              // 61
+install("reactive-var");                                                                                               // 62
+install("accounts-base", "meteor/accounts-base/client_main.js");                                                       // 63
+install("sha");                                                                                                        // 64
+install("srp");                                                                                                        // 65
+install("accounts-password");                                                                                          // 66
+install("service-configuration");                                                                                      // 67
+                                                                                                                       // 68
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 },"process.js":["process",function(require,exports,module){
@@ -172,6 +181,22 @@ _.extend(process.env, meteorEnv);                                               
                                                                                                                        // 28
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+}],"reify.js":["reify/lib/runtime",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// packages/modules/reify.js                                                                                           //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+var Module = module.constructor;                                                                                       // 1
+require("reify/lib/runtime").enable(Module);                                                                           // 2
+var Mp = Module.prototype;                                                                                             // 3
+Mp.importSync = Mp.importSync || Mp.import;                                                                            // 4
+Mp.import = Mp.import || Mp.importSync;                                                                                // 5
+                                                                                                                       // 6
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 }],"stubs.js":["meteor-node-stubs",function(require){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,16 +205,22 @@ _.extend(process.env, meteorEnv);                                               
 //                                                                                                                     //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
-try {                                                                                                                  // 1
-  // When meteor-node-stubs is installed in the application's root                                                     // 2
-  // node_modules directory, requiring it here installs aliases for stubs                                              // 3
-  // for all Node built-in modules, such as fs, util, and http.                                                        // 4
-  require("meteor-node-stubs");                                                                                        // 5
-} catch (noStubs) {}                                                                                                   // 6
-                                                                                                                       // 7
+var haveStubs = false;                                                                                                 // 1
+try {                                                                                                                  // 2
+  require.resolve("meteor-node-stubs");                                                                                // 3
+  haveStubs = true;                                                                                                    // 4
+} catch (noStubs) {}                                                                                                   // 5
+                                                                                                                       // 6
+if (haveStubs) {                                                                                                       // 7
+  // When meteor-node-stubs is installed in the application's root                                                     // 8
+  // node_modules directory, requiring it here installs aliases for stubs                                              // 9
+  // for all Node built-in modules, such as fs, util, and http.                                                        // 10
+  require("meteor-node-stubs");                                                                                        // 11
+}                                                                                                                      // 12
+                                                                                                                       // 13
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-}],"node_modules":{"reify":{"lib":{"runtime.js":["./entry.js","./utils.js",function(require,exports,module){
+}],"node_modules":{"reify":{"lib":{"runtime.js":["./entry.js",function(require,exports,module){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                     //
@@ -197,139 +228,144 @@ try {                                                                           
 //                                                                                                                     //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
-var Entry = require("./entry.js").Entry;                                                                               // 1
-var utils = require("./utils.js");                                                                                     // 2
-                                                                                                                       // 3
-exports.enable = function (Module) {                                                                                   // 4
-  var Mp = Module.prototype;                                                                                           // 5
-                                                                                                                       // 6
-  if (typeof Mp.import === "function" &&                                                                               // 7
-      typeof Mp.export === "function") {                                                                               // 8
-    // If the Mp.{import,export} methods have already been                                                             // 9
-    // defined, abandon reification immediately.                                                                       // 10
-    return Module;                                                                                                     // 11
-  }                                                                                                                    // 12
-                                                                                                                       // 13
-  // Platform-specific code should implement this method however                                                       // 14
-  // appropriate. Module.prototype.resolve(id) should return an absolute                                               // 15
-  // version of the given module identifier, like require.resolve.                                                     // 16
-  Mp.resolve = Mp.resolve || function resolve(id) {                                                                    // 17
-    throw new Error("Module.prototype.resolve not implemented");                                                       // 18
-  };                                                                                                                   // 19
-                                                                                                                       // 20
-  // Platform-specific code should find a way to call this method whenever                                             // 21
-  // the module system is about to return module.exports from require. This                                            // 22
-  // might happen more than once per module, in case of dependency cycles,                                             // 23
-  // so we want Module.prototype.runModuleSetters to run each time.                                                    // 24
-  Mp.runModuleSetters = function runModuleSetters(valueToPassThrough) {                                                // 25
-    var entry = Entry.get(this.id);                                                                                    // 26
-    if (entry) {                                                                                                       // 27
-      entry.runModuleSetters(this);                                                                                    // 28
-    }                                                                                                                  // 29
-                                                                                                                       // 30
-    // Assignments to exported local variables get wrapped with calls to                                               // 31
-    // module.runModuleSetters, so module.runModuleSetters returns the                                                 // 32
-    // valueToPassThrough parameter to allow the value of the original                                                 // 33
-    // expression to pass through. For example,                                                                        // 34
-    //                                                                                                                 // 35
-    //   export var a = 1;                                                                                             // 36
-    //   console.log(a += 3);                                                                                          // 37
-    //                                                                                                                 // 38
-    // becomes                                                                                                         // 39
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
+var hasOwn = Object.prototype.hasOwnProperty;                                                                          // 3
+var Entry = require("./entry.js").Entry;                                                                               // 4
+                                                                                                                       // 5
+exports.enable = function (Module) {                                                                                   // 6
+  var Mp = Module.prototype;                                                                                           // 7
+                                                                                                                       // 8
+  if (typeof Mp.importSync === "function" &&                                                                           // 9
+      typeof Mp.export === "function") {                                                                               // 10
+    // If the Mp.{importSync,export} methods have already been defined,                                                // 11
+    // abandon reification immediately.                                                                                // 12
+    return Module;                                                                                                     // 13
+  }                                                                                                                    // 14
+                                                                                                                       // 15
+  // Platform-specific code should implement this method however                                                       // 16
+  // appropriate. Module.prototype.resolve(id) should return an absolute                                               // 17
+  // version of the given module identifier, like require.resolve.                                                     // 18
+  Mp.resolve = Mp.resolve || function resolve(id) {                                                                    // 19
+    throw new Error("Module.prototype.resolve not implemented");                                                       // 20
+  };                                                                                                                   // 21
+                                                                                                                       // 22
+  // Platform-specific code should find a way to call this method whenever                                             // 23
+  // the module system is about to return module.exports from require. This                                            // 24
+  // might happen more than once per module, in case of dependency cycles,                                             // 25
+  // so we want Module.prototype.runModuleSetters to run each time.                                                    // 26
+  Mp.runModuleSetters = function runModuleSetters(valueToPassThrough) {                                                // 27
+    var entry = Entry.get(this.id);                                                                                    // 28
+    if (entry) {                                                                                                       // 29
+      entry.runModuleSetters(this);                                                                                    // 30
+    }                                                                                                                  // 31
+                                                                                                                       // 32
+    // Assignments to exported local variables get wrapped with calls to                                               // 33
+    // module.runModuleSetters, so module.runModuleSetters returns the                                                 // 34
+    // valueToPassThrough parameter to allow the value of the original                                                 // 35
+    // expression to pass through. For example,                                                                        // 36
+    //                                                                                                                 // 37
+    //   export var a = 1;                                                                                             // 38
+    //   console.log(a += 3);                                                                                          // 39
     //                                                                                                                 // 40
-    //   module.export("a", () => a);                                                                                  // 41
-    //   var a = 1;                                                                                                    // 42
-    //   console.log(module.runModuleSetters(a += 3));                                                                 // 43
-    //                                                                                                                 // 44
-    // This ensures module.runModuleSetters runs immediately after the                                                 // 45
-    // assignment, and does not interfere with the larger computation.                                                 // 46
-    return valueToPassThrough;                                                                                         // 47
-  };                                                                                                                   // 48
-                                                                                                                       // 49
-  function setESModule(module) {                                                                                       // 50
-    var exports = module.exports;                                                                                      // 51
-    if (exports && typeof exports === "object") {                                                                      // 52
-      exports.__esModule = true;                                                                                       // 53
-    }                                                                                                                  // 54
-  }                                                                                                                    // 55
-                                                                                                                       // 56
-  // If key is provided, it will be used to identify the given setters so                                              // 57
-  // that they can be replaced if module.import is called again with the                                               // 58
-  // same key. This avoids potential memory leaks from import declarations                                             // 59
-  // inside loops. The compiler generates these keys automatically (and                                                // 60
-  // deterministically) when compiling nested import declarations.                                                     // 61
-  Mp.import = function (id, setters, key) {                                                                            // 62
-    var module = this;                                                                                                 // 63
-    setESModule(module);                                                                                               // 64
+    // becomes                                                                                                         // 41
+    //                                                                                                                 // 42
+    //   module.export("a", () => a);                                                                                  // 43
+    //   var a = 1;                                                                                                    // 44
+    //   console.log(module.runModuleSetters(a += 3));                                                                 // 45
+    //                                                                                                                 // 46
+    // This ensures module.runModuleSetters runs immediately after the                                                 // 47
+    // assignment, and does not interfere with the larger computation.                                                 // 48
+    return valueToPassThrough;                                                                                         // 49
+  };                                                                                                                   // 50
+                                                                                                                       // 51
+  function setESModule(module) {                                                                                       // 52
+    var exports = module.exports;                                                                                      // 53
+    if (exports &&                                                                                                     // 54
+        typeof exports === "object" &&                                                                                 // 55
+        ! hasOwn.call(exports, "__esModule")) {                                                                        // 56
+      Object.defineProperty(exports, "__esModule", {                                                                   // 57
+        value: true,                                                                                                   // 58
+        enumerable: false,                                                                                             // 59
+        writable: false,                                                                                               // 60
+        configurable: true                                                                                             // 61
+      });                                                                                                              // 62
+    }                                                                                                                  // 63
+  }                                                                                                                    // 64
                                                                                                                        // 65
-    var absoluteId = module.resolve(id);                                                                               // 66
-                                                                                                                       // 67
-    if (setters && typeof setters === "object") {                                                                      // 68
-      var entry = Entry.getOrCreate(absoluteId);                                                                       // 69
-      entry.addSetters(module, setters, key);                                                                          // 70
-    }                                                                                                                  // 71
-                                                                                                                       // 72
-    var countBefore = entry && entry.runCount;                                                                         // 73
-    var exports = typeof module.require === "function"                                                                 // 74
-      ? module.require(absoluteId)                                                                                     // 75
-      : require(absoluteId);                                                                                           // 76
-                                                                                                                       // 77
-    if (entry && entry.runCount === countBefore) {                                                                     // 78
-      // If require(absoluteId) didn't run any setters for this entry,                                                 // 79
-      // perhaps because it's not the first time this module has been                                                  // 80
-      // required, run the setters now using an object that passes as the                                              // 81
-      // real module object.                                                                                           // 82
-      entry.runModuleSetters({                                                                                         // 83
-        id: absoluteId,                                                                                                // 84
-        exports: exports,                                                                                              // 85
-        getExportByName: Mp.getExportByName                                                                            // 86
-      });                                                                                                              // 87
-    }                                                                                                                  // 88
-  };                                                                                                                   // 89
-                                                                                                                       // 90
-  // Register getter functions for local variables in the scope of an                                                  // 91
-  // export statement. The keys of the getters object are exported names,                                              // 92
-  // and the values are functions that return local values.                                                            // 93
-  Mp.export = function (getters) {                                                                                     // 94
-    var module = this;                                                                                                 // 95
-    setESModule(module);                                                                                               // 96
-                                                                                                                       // 97
-    if (utils.isPlainObject(getters)) {                                                                                // 98
-      Entry.getOrCreate(module.id).addGetters(getters);                                                                // 99
-    }                                                                                                                  // 100
-                                                                                                                       // 101
-    if (module.loaded) {                                                                                               // 102
-      // If the module has already been evaluated, then we need to trigger                                             // 103
-      // another round of entry.runModuleSetters calls, which begins by                                                // 104
-      // calling entry.runModuleGetters(module).                                                                       // 105
-      module.runModuleSetters();                                                                                       // 106
-    }                                                                                                                  // 107
-  };                                                                                                                   // 108
-                                                                                                                       // 109
-  // This method can be overridden by client code to implement custom export                                           // 110
-  // naming logic. The current implementation works well with Babel's                                                  // 111
-  // __esModule convention.                                                                                            // 112
-  Mp.getExportByName = function (name) {                                                                               // 113
-    var exports = this.exports;                                                                                        // 114
-                                                                                                                       // 115
-    if (name === "*") {                                                                                                // 116
-      return exports;                                                                                                  // 117
-    }                                                                                                                  // 118
-                                                                                                                       // 119
-    if (name === "default" &&                                                                                          // 120
-        ! (exports &&                                                                                                  // 121
-           typeof exports === "object" &&                                                                              // 122
-           exports.__esModule &&                                                                                       // 123
-           "default" in exports)) {                                                                                    // 124
-      return exports;                                                                                                  // 125
-    }                                                                                                                  // 126
-                                                                                                                       // 127
-    return exports && exports[name];                                                                                   // 128
-  };                                                                                                                   // 129
-                                                                                                                       // 130
-  return Module;                                                                                                       // 131
-};                                                                                                                     // 132
-                                                                                                                       // 133
+  // If key is provided, it will be used to identify the given setters so                                              // 66
+  // that they can be replaced if module.importSync is called again with the                                           // 67
+  // same key. This avoids potential memory leaks from import declarations                                             // 68
+  // inside loops. The compiler generates these keys automatically (and                                                // 69
+  // deterministically) when compiling nested import declarations.                                                     // 70
+  Mp.importSync = function (id, setters, key) {                                                                        // 71
+    setESModule(this);                                                                                                 // 72
+                                                                                                                       // 73
+    var absoluteId = this.resolve(id);                                                                                 // 74
+                                                                                                                       // 75
+    if (setters && typeof setters === "object") {                                                                      // 76
+      var entry = Entry.getOrCreate(absoluteId);                                                                       // 77
+      entry.addSetters(this, setters, key);                                                                            // 78
+    }                                                                                                                  // 79
+                                                                                                                       // 80
+    var countBefore = entry ? entry.runCount : 0;                                                                      // 81
+    var exports = this.require(absoluteId);                                                                            // 82
+                                                                                                                       // 83
+    if (entry && entry.runCount === countBefore) {                                                                     // 84
+      // If require(absoluteId) didn't run any setters for this entry,                                                 // 85
+      // perhaps because it's not the first time this module has been                                                  // 86
+      // required, run the setters now using an object that passes as the                                              // 87
+      // real module object.                                                                                           // 88
+      entry.runModuleSetters({                                                                                         // 89
+        id: absoluteId,                                                                                                // 90
+        exports: exports,                                                                                              // 91
+        getExportByName: Mp.getExportByName                                                                            // 92
+      });                                                                                                              // 93
+    }                                                                                                                  // 94
+  };                                                                                                                   // 95
+                                                                                                                       // 96
+  // Register getter functions for local variables in the scope of an                                                  // 97
+  // export statement. The keys of the getters object are exported names,                                              // 98
+  // and the values are functions that return local values.                                                            // 99
+  Mp.export = function (getters) {                                                                                     // 100
+    setESModule(this);                                                                                                 // 101
+                                                                                                                       // 102
+    if (getters && typeof getters === "object") {                                                                      // 103
+      Entry.getOrCreate(this.id).addGetters(getters);                                                                  // 104
+    }                                                                                                                  // 105
+                                                                                                                       // 106
+    if (this.loaded) {                                                                                                 // 107
+      // If the module has already been evaluated, then we need to trigger                                             // 108
+      // another round of entry.runModuleSetters calls, which begins by                                                // 109
+      // calling entry.runModuleGetters(module).                                                                       // 110
+      this.runModuleSetters();                                                                                         // 111
+    }                                                                                                                  // 112
+  };                                                                                                                   // 113
+                                                                                                                       // 114
+  // This method can be overridden by client code to implement custom export                                           // 115
+  // naming logic. The current implementation works well with Babel's                                                  // 116
+  // __esModule convention.                                                                                            // 117
+  Mp.getExportByName = function (name) {                                                                               // 118
+    var exports = this.exports;                                                                                        // 119
+                                                                                                                       // 120
+    if (name === "*") {                                                                                                // 121
+      return exports;                                                                                                  // 122
+    }                                                                                                                  // 123
+                                                                                                                       // 124
+    if (name === "default" &&                                                                                          // 125
+        ! (exports &&                                                                                                  // 126
+           typeof exports === "object" &&                                                                              // 127
+           exports.__esModule &&                                                                                       // 128
+           "default" in exports)) {                                                                                    // 129
+      return exports;                                                                                                  // 130
+    }                                                                                                                  // 131
+                                                                                                                       // 132
+    return exports && exports[name];                                                                                   // 133
+  };                                                                                                                   // 134
+                                                                                                                       // 135
+  return Module;                                                                                                       // 136
+};                                                                                                                     // 137
+                                                                                                                       // 138
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }],"entry.js":["./utils.js",function(require,exports,module){
@@ -340,247 +376,221 @@ exports.enable = function (Module) {                                            
 //                                                                                                                     //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
-var hasOwn = Object.prototype.hasOwnProperty;                                                                          // 1
-var entryMap = Object.create(null);                                                                                    // 2
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
 var utils = require("./utils.js");                                                                                     // 3
                                                                                                                        // 4
-function Entry(id) {                                                                                                   // 5
-  // Same as module.id for this module.                                                                                // 6
-  this.id = id;                                                                                                        // 7
-  // The number of times this.runModuleSetters has been called.                                                        // 8
-  this.runCount = 0;                                                                                                   // 9
-  // Setters for assigning to local variables in parent modules.                                                       // 10
-  this.setters = Object.create(null);                                                                                  // 11
-  // Getters for local variables exported from this module.                                                            // 12
-  this.getters = Object.create(null);                                                                                  // 13
-}                                                                                                                      // 14
-                                                                                                                       // 15
-var Ep = Entry.prototype;                                                                                              // 16
-                                                                                                                       // 17
-Entry.get = function (id) {                                                                                            // 18
-  return entryMap[id] || null;                                                                                         // 19
-};                                                                                                                     // 20
-                                                                                                                       // 21
-Entry.getOrCreate = function (id) {                                                                                    // 22
-  return entryMap[id] = entryMap[id] || new Entry(id);                                                                 // 23
-};                                                                                                                     // 24
-                                                                                                                       // 25
-var keySalt = 0;                                                                                                       // 26
-function makeUniqueKey() {                                                                                             // 27
-  return Math.random()                                                                                                 // 28
-    .toString(36)                                                                                                      // 29
-    // Add an incrementing salt to help track key ordering and also                                                    // 30
-    // absolutely guarantee we never return the same key twice.                                                        // 31
-    .replace("0.", ++keySalt + ":");                                                                                   // 32
-}                                                                                                                      // 33
-                                                                                                                       // 34
-Ep.addSetters = function (parent, setters, key) {                                                                      // 35
-  var entry = this;                                                                                                    // 36
+var entryMap = Object.create(null);                                                                                    // 5
+var hasOwn = Object.prototype.hasOwnProperty;                                                                          // 6
+                                                                                                                       // 7
+function Entry(id) {                                                                                                   // 8
+  // Same as module.id for this module.                                                                                // 9
+  this.id = id;                                                                                                        // 10
+  // The number of times this.runModuleSetters has been called.                                                        // 11
+  this.runCount = 0;                                                                                                   // 12
+  // Setters for assigning to local variables in parent modules.                                                       // 13
+  this.setters = Object.create(null);                                                                                  // 14
+  // Getters for local variables exported from this module.                                                            // 15
+  this.getters = Object.create(null);                                                                                  // 16
+}                                                                                                                      // 17
+                                                                                                                       // 18
+var Ep = Entry.prototype;                                                                                              // 19
+                                                                                                                       // 20
+Entry.get = function (id) {                                                                                            // 21
+  return entryMap[id] || null;                                                                                         // 22
+};                                                                                                                     // 23
+                                                                                                                       // 24
+Entry.getOrCreate = function (id) {                                                                                    // 25
+  return entryMap[id] = entryMap[id] || new Entry(id);                                                                 // 26
+};                                                                                                                     // 27
+                                                                                                                       // 28
+var keySalt = 0;                                                                                                       // 29
+function makeUniqueKey() {                                                                                             // 30
+  return Math.random()                                                                                                 // 31
+    .toString(36)                                                                                                      // 32
+    // Add an incrementing salt to help track key ordering and also                                                    // 33
+    // absolutely guarantee we never return the same key twice.                                                        // 34
+    .replace("0.", ++keySalt + ":");                                                                                   // 35
+}                                                                                                                      // 36
                                                                                                                        // 37
-  if (typeof key === "undefined") {                                                                                    // 38
-    // If no key was provided, make a new unique key that won't collide                                                // 39
-    // with any other keys.                                                                                            // 40
-    key = makeUniqueKey();                                                                                             // 41
-  } else {                                                                                                             // 42
-    // If a key was provided, make sure it is distinct from keys provided                                              // 43
-    // by other parent modules.                                                                                        // 44
-    key = parent.id + ":" + key;                                                                                       // 45
-  }                                                                                                                    // 46
-                                                                                                                       // 47
-  Object.keys(setters).forEach(function (name) {                                                                       // 48
-    var setter = setters[name];                                                                                        // 49
-    if (typeof setter === "function" &&                                                                                // 50
-        // Ignore any requests for the exports.__esModule property."                                                   // 51
-        name !== "__esModule") {                                                                                       // 52
-      setter.parent = parent;                                                                                          // 53
-      (entry.setters[name] =                                                                                           // 54
-       entry.setters[name] || Object.create(null)                                                                      // 55
-      )[key] = setter;                                                                                                 // 56
-    }                                                                                                                  // 57
-  });                                                                                                                  // 58
-};                                                                                                                     // 59
-                                                                                                                       // 60
-Ep.addGetters = function (getters) {                                                                                   // 61
-  var entry = this;                                                                                                    // 62
-  Object.keys(getters).forEach(function (name) {                                                                       // 63
-    var getter = getters[name];                                                                                        // 64
-    if (typeof getter === "function" &&                                                                                // 65
-        // Ignore any requests for the exports.__esModule property."                                                   // 66
-        name !== "__esModule") {                                                                                       // 67
-      // Should this throw if hasOwn.call(this.getters, name)?                                                         // 68
-      entry.getters[name] = getter;                                                                                    // 69
-    }                                                                                                                  // 70
-  });                                                                                                                  // 71
-};                                                                                                                     // 72
-                                                                                                                       // 73
-function runModuleSetters(module) {                                                                                    // 74
-  var entry = entryMap[module.id];                                                                                     // 75
-  if (entry) {                                                                                                         // 76
-    entry.runModuleSetters(module);                                                                                    // 77
-  }                                                                                                                    // 78
-}                                                                                                                      // 79
-                                                                                                                       // 80
-function runModuleGetters(module) {                                                                                    // 81
-  var entry = entryMap[module.id];                                                                                     // 82
-  return entry ? entry.runModuleGetters(module) : 0;                                                                   // 83
-}                                                                                                                      // 84
-                                                                                                                       // 85
-Ep.runModuleGetters = function (module) {                                                                              // 86
-  var entry = this;                                                                                                    // 87
-  var changeCount = 0;                                                                                                 // 88
+Ep.addSetters = function (parent, setters, key) {                                                                      // 38
+  if (typeof key === "undefined") {                                                                                    // 39
+    // If no key was provided, make a new unique key that won't collide                                                // 40
+    // with any other keys.                                                                                            // 41
+    key = makeUniqueKey();                                                                                             // 42
+  } else {                                                                                                             // 43
+    // If a key was provided, make sure it is distinct from keys provided                                              // 44
+    // by other parent modules.                                                                                        // 45
+    key = parent.id + ":" + key;                                                                                       // 46
+  }                                                                                                                    // 47
+                                                                                                                       // 48
+  var names = Object.keys(setters);                                                                                    // 49
+  var nameCount = names.length;                                                                                        // 50
+                                                                                                                       // 51
+  for (var i = 0; i < nameCount; ++i) {                                                                                // 52
+    var name = names[i];                                                                                               // 53
+    var setter = setters[name];                                                                                        // 54
+    if (typeof setter === "function" &&                                                                                // 55
+        // Ignore any requests for the exports.__esModule property."                                                   // 56
+        name !== "__esModule") {                                                                                       // 57
+      setter.parent = parent;                                                                                          // 58
+      (this.setters[name] =                                                                                            // 59
+       this.setters[name] || Object.create(null)                                                                       // 60
+      )[key] = setter;                                                                                                 // 61
+    }                                                                                                                  // 62
+  }                                                                                                                    // 63
+};                                                                                                                     // 64
+                                                                                                                       // 65
+Ep.addGetters = function (getters) {                                                                                   // 66
+  var names = Object.keys(getters);                                                                                    // 67
+  var nameCount = names.length;                                                                                        // 68
+                                                                                                                       // 69
+  for (var i = 0; i < nameCount; ++i) {                                                                                // 70
+    var name = names[i];                                                                                               // 71
+    var getter = getters[name];                                                                                        // 72
+    if (typeof getter === "function" &&                                                                                // 73
+        // Ignore any requests for the exports.__esModule property."                                                   // 74
+        name !== "__esModule" &&                                                                                       // 75
+        // Should this throw if hasOwn.call(this.getters, name)?                                                       // 76
+        ! hasOwn.call(this.getters, name)) {                                                                           // 77
+      this.getters[name] = getter;                                                                                     // 78
+    }                                                                                                                  // 79
+  }                                                                                                                    // 80
+};                                                                                                                     // 81
+                                                                                                                       // 82
+function runModuleSetters(module) {                                                                                    // 83
+  var entry = entryMap[module.id];                                                                                     // 84
+  if (entry) {                                                                                                         // 85
+    entry.runModuleSetters(module);                                                                                    // 86
+  }                                                                                                                    // 87
+}                                                                                                                      // 88
                                                                                                                        // 89
-  Object.keys(entry.getters).forEach(function (name) {                                                                 // 90
-    if (entry.runGetter(module, name)) {                                                                               // 91
-      ++changeCount;                                                                                                   // 92
-    }                                                                                                                  // 93
-  });                                                                                                                  // 94
-                                                                                                                       // 95
-  return changeCount;                                                                                                  // 96
+Ep.runModuleGetters = function (module) {                                                                              // 90
+  var names = Object.keys(this.getters);                                                                               // 91
+  var nameCount = names.length;                                                                                        // 92
+                                                                                                                       // 93
+  for (var i = 0; i < nameCount; ++i) {                                                                                // 94
+    this.runGetter(module, names[i]);                                                                                  // 95
+  }                                                                                                                    // 96
 };                                                                                                                     // 97
                                                                                                                        // 98
 // Returns true iff the getter updated module.exports with a new value.                                                // 99
 Ep.runGetter = function (module, name) {                                                                               // 100
-  if (! hasOwn.call(this.getters, name)) {                                                                             // 101
-    return false;                                                                                                      // 102
-  }                                                                                                                    // 103
-                                                                                                                       // 104
-  var getter = this.getters[name];                                                                                     // 105
-  try {                                                                                                                // 106
-    var value = getter.call(module);                                                                                   // 107
-  } catch (e) {}                                                                                                       // 108
-  var exports = module.exports;                                                                                        // 109
-                                                                                                                       // 110
-  if (! hasOwn.call(exports, name) ||                                                                                  // 111
-      exports[name] !== value) {                                                                                       // 112
-    // We update module.exports[name] with the current value so that                                                   // 113
-    // CommonJS require calls remain consistent with module.import.                                                    // 114
-    exports[name] = value;                                                                                             // 115
-    return true;                                                                                                       // 116
-  }                                                                                                                    // 117
-                                                                                                                       // 118
-  return false;                                                                                                        // 119
-};                                                                                                                     // 120
-                                                                                                                       // 121
-// Called whenever module.exports might have changed, to trigger any                                                   // 122
-// setters associated with the newly exported values.                                                                  // 123
-Ep.runModuleSetters = function (module) {                                                                              // 124
-  var entry = this;                                                                                                    // 125
-  var names = Object.keys(entry.setters);                                                                              // 126
-                                                                                                                       // 127
-  // Make sure module.exports is up to date before we call                                                             // 128
-  // module.getExportByName(name).                                                                                     // 129
-  entry.runModuleGetters(module);                                                                                      // 130
-                                                                                                                       // 131
-  // Invoke the given callback once for every (setter, value, name) triple                                             // 132
-  // that needs to be called. Note that forEachSetter does not call any                                                // 133
-  // setters itself, only the given callback.                                                                          // 134
-  function forEachSetter(callback, context) {                                                                          // 135
-    names.forEach(function (name) {                                                                                    // 136
-      var setters = entry.setters[name];                                                                               // 137
-      Object.keys(setters).forEach(function (key) {                                                                    // 138
-        var value = module.getExportByName(name);                                                                      // 139
-        if (name === "*") {                                                                                            // 140
-          Object.keys(value).forEach(function (name) {                                                                 // 141
-            call(setters[key], value[name], name);                                                                     // 142
-          });                                                                                                          // 143
-        } else {                                                                                                       // 144
-          call(setters[key], value, name);                                                                             // 145
-        }                                                                                                              // 146
-      });                                                                                                              // 147
-    });                                                                                                                // 148
+  if (hasOwn.call(this.getters, name)) {                                                                               // 101
+    try {                                                                                                              // 102
+      // Update module.exports[name] with the current value so that CommonJS                                           // 103
+      // require calls remain consistent with module.importSync.                                                       // 104
+      return module.exports[name] =                                                                                    // 105
+        this.getters[name].call(module);                                                                               // 106
+                                                                                                                       // 107
+    } catch (e) {                                                                                                      // 108
+      // If the getter threw an exception, avoid updating module.exports                                               // 109
+      // and return undefined.                                                                                         // 110
+    }                                                                                                                  // 111
+  }                                                                                                                    // 112
+};                                                                                                                     // 113
+                                                                                                                       // 114
+// Called whenever module.exports might have changed, to trigger any                                                   // 115
+// setters associated with the newly exported values.                                                                  // 116
+Ep.runModuleSetters = function (module) {                                                                              // 117
+  var entry = this;                                                                                                    // 118
+  var names = Object.keys(this.setters);                                                                               // 119
+                                                                                                                       // 120
+  // Make sure module.exports is up to date before we call                                                             // 121
+  // module.getExportByName(name).                                                                                     // 122
+  this.runModuleGetters(module);                                                                                       // 123
+                                                                                                                       // 124
+  if (! names.length) {                                                                                                // 125
+    ++this.runCount;                                                                                                   // 126
+    return;                                                                                                            // 127
+  }                                                                                                                    // 128
+                                                                                                                       // 129
+  // Invoke the given callback once for every (setter, value, name) triple                                             // 130
+  // that needs to be called. Note that forEachSetter does not call any                                                // 131
+  // setters itself, only the given callback.                                                                          // 132
+  function forEachSetter(callback, context) {                                                                          // 133
+    var nameCount = names.length;                                                                                      // 134
+                                                                                                                       // 135
+    for (var i = 0; i < nameCount; ++i) {                                                                              // 136
+      var name = names[i];                                                                                             // 137
+      var setters = entry.setters[name];                                                                               // 138
+      var keys = Object.keys(setters);                                                                                 // 139
+      var keyCount = keys.length;                                                                                      // 140
+                                                                                                                       // 141
+      for (var j = 0; j < keyCount; ++j) {                                                                             // 142
+        var key = keys[j];                                                                                             // 143
+        var value = module.getExportByName(name);                                                                      // 144
+                                                                                                                       // 145
+        if (name === "*") {                                                                                            // 146
+          var valueNames = Object.keys(value);                                                                         // 147
+          var valueNameCount = valueNames.length;                                                                      // 148
                                                                                                                        // 149
-    function call(setter, value, name) {                                                                               // 150
-      if (name === "__esModule") {                                                                                     // 151
-        // Ignore setters asking for module.exports.__esModule.                                                        // 152
-        return;                                                                                                        // 153
-      }                                                                                                                // 154
-                                                                                                                       // 155
-      setter.last = setter.last || Object.create(null);                                                                // 156
-                                                                                                                       // 157
-      if (! hasOwn.call(setter.last, name) ||                                                                          // 158
-          setter.last[name] !== value) {                                                                               // 159
-        // Only invoke the callback if we have not called this setter                                                  // 160
-        // (with a value of this name) before, or the current value is                                                 // 161
-        // different from the last value we passed to this setter.                                                     // 162
-        return callback.apply(context, arguments);                                                                     // 163
-      }                                                                                                                // 164
-    }                                                                                                                  // 165
-  }                                                                                                                    // 166
-                                                                                                                       // 167
-  // Every three elements of this list form a (setter, value, name) triple                                             // 168
-  // that needs to be invoked.                                                                                         // 169
-  var settersToCall = [];                                                                                              // 170
-                                                                                                                       // 171
-  // Lazily-initialized objects mapping parent module identifiers to                                                   // 172
-  // relevant parent module objects and snapshots of their exports.                                                    // 173
-  var relevantParents;                                                                                                 // 174
-  var parentSnapshots;                                                                                                 // 175
-                                                                                                                       // 176
-  // Take snapshots of setter.parent.exports for any setters that we are                                               // 177
-  // planning to call, so that we can later determine if calling the                                                   // 178
-  // setters modified any of those exports objects.                                                                    // 179
-  forEachSetter(function (setter, value, name) {                                                                       // 180
-    var parent = setter.parent;                                                                                        // 181
-    parentSnapshots = parentSnapshots || Object.create(null);                                                          // 182
-    if (! hasOwn.call(parentSnapshots, parent.id)) {                                                                   // 183
-      relevantParents = relevantParents || Object.create(null);                                                        // 184
-      relevantParents[parent.id] = parent;                                                                             // 185
-      if (utils.isPlainObject(parent.exports)) {                                                                       // 186
-        // If parent.exports is an object, make a shallow clone of it so                                               // 187
-        // that we can see if it changes as a result of calling setters.                                               // 188
-        parentSnapshots[parent.id] = utils.assign({}, parent.exports);                                                 // 189
-      } else {                                                                                                         // 190
-        // If parent.exports is not an object, the "snapshot" is just the                                              // 191
-        // value of parent.exports.                                                                                    // 192
-        parentSnapshots[parent.id] = parent.exports;                                                                   // 193
-      }                                                                                                                // 194
-    }                                                                                                                  // 195
-                                                                                                                       // 196
-    // Push three elements at a time to avoid creating wrapper arrays for                                              // 197
-    // each (setter, value, name) triple. Note the i += 3 below.                                                       // 198
-    settersToCall.push(setter, value, name);                                                                           // 199
-  });                                                                                                                  // 200
+          for (var k = 0; k < valueNameCount; ++k) {                                                                   // 150
+            var valueName = valueNames[k];                                                                             // 151
+            call(setters[key], value[valueName], valueName);                                                           // 152
+          }                                                                                                            // 153
+                                                                                                                       // 154
+        } else {                                                                                                       // 155
+          call(setters[key], value, name);                                                                             // 156
+        }                                                                                                              // 157
+      }                                                                                                                // 158
+    }                                                                                                                  // 159
+                                                                                                                       // 160
+    function call(setter, value, name) {                                                                               // 161
+      if (name === "__esModule") {                                                                                     // 162
+        // Ignore setters asking for module.exports.__esModule.                                                        // 163
+        return;                                                                                                        // 164
+      }                                                                                                                // 165
+                                                                                                                       // 166
+      setter.last = setter.last || Object.create(null);                                                                // 167
+                                                                                                                       // 168
+      if (! hasOwn.call(setter.last, name) ||                                                                          // 169
+          setter.last[name] !== value) {                                                                               // 170
+        // Only invoke the callback if we have not called this setter                                                  // 171
+        // (with a value of this name) before, or the current value is                                                 // 172
+        // different from the last value we passed to this setter.                                                     // 173
+        return callback.apply(context, arguments);                                                                     // 174
+      }                                                                                                                // 175
+    }                                                                                                                  // 176
+  }                                                                                                                    // 177
+                                                                                                                       // 178
+  // Lazily-initialized object mapping parent module identifiers to parent                                             // 179
+  // module objects whose setters we might need to run.                                                                // 180
+  var relevantParents;                                                                                                 // 181
+                                                                                                                       // 182
+  // Take snapshots of setter.parent.exports for any setters that we are                                               // 183
+  // planning to call, so that we can later determine if calling the                                                   // 184
+  // setters modified any of those exports objects.                                                                    // 185
+  forEachSetter(function (setter, value, name) {                                                                       // 186
+    relevantParents = relevantParents || Object.create(null);                                                          // 187
+    relevantParents[setter.parent.id] = setter.parent;                                                                 // 188
+    setter.call(module, setter.last[name] = value, name);                                                              // 189
+  });                                                                                                                  // 190
+                                                                                                                       // 191
+  ++entry.runCount;                                                                                                    // 192
+                                                                                                                       // 193
+  if (! relevantParents) {                                                                                             // 194
+    return;                                                                                                            // 195
+  }                                                                                                                    // 196
+                                                                                                                       // 197
+  // If any of the setters updated the module.exports of a parent module,                                              // 198
+  // or updated local variables that are exported by that parent module,                                               // 199
+  // then we must re-run any setters registered by that parent module.                                                 // 200
                                                                                                                        // 201
-  // Now call all the setters that we decided we need to call.                                                         // 202
-  for (var i = 0; i < settersToCall.length; i += 3) {                                                                  // 203
-    var setter = settersToCall[i];                                                                                     // 204
-    var value = settersToCall[i + 1];                                                                                  // 205
-    var name = settersToCall[i + 2];                                                                                   // 206
-    setter.call(module, setter.last[name] = value, name);                                                              // 207
-  }                                                                                                                    // 208
-                                                                                                                       // 209
-  ++entry.runCount;                                                                                                    // 210
-                                                                                                                       // 211
-  if (! relevantParents) {                                                                                             // 212
-    // If we never called takeSnapshot, then we can avoid checking                                                     // 213
-    // relevantParents and parentSnapshots below.                                                                      // 214
-    return;                                                                                                            // 215
-  }                                                                                                                    // 216
-                                                                                                                       // 217
-  // If any of the setters updated the module.exports of a parent module,                                              // 218
-  // or updated local variables that are exported by that parent module,                                               // 219
-  // then we must re-run any setters registered by that parent module.                                                 // 220
-  Object.keys(relevantParents).forEach(function (id) {                                                                 // 221
-    var parent = relevantParents[id];                                                                                  // 222
-                                                                                                                       // 223
-    if (runModuleGetters(parent) > 0) {                                                                                // 224
-      return runModuleSetters(parent);                                                                                 // 225
-    }                                                                                                                  // 226
-                                                                                                                       // 227
-    var exports = parent.exports;                                                                                      // 228
-    var snapshot = parentSnapshots[parent.id];                                                                         // 229
-    if (utils.shallowObjEqual(exports, snapshot)) {                                                                    // 230
-      // If parent.exports have not changed since we took the snapshot,                                                // 231
-      // then we do not need to run the parent's setters.                                                              // 232
-      return;                                                                                                          // 233
-    }                                                                                                                  // 234
-                                                                                                                       // 235
-    runModuleSetters(parent);                                                                                          // 236
-  });                                                                                                                  // 237
-};                                                                                                                     // 238
-                                                                                                                       // 239
-exports.Entry = Entry;                                                                                                 // 240
-                                                                                                                       // 241
+  var parentIDs = Object.keys(relevantParents);                                                                        // 202
+  var parentIDCount = parentIDs.length;                                                                                // 203
+                                                                                                                       // 204
+  for (var i = 0; i < parentIDCount; ++i) {                                                                            // 205
+    // What happens if relevantParents[parentIDs[id]] === module, or if                                                // 206
+    // longer cycles exist in the parent chain? Thanks to our setter.last                                              // 207
+    // bookkeeping above, the runModuleSetters broadcast will only proceed                                             // 208
+    // as far as there are any actual changes to report.                                                               // 209
+    runModuleSetters(relevantParents[parentIDs[i]]);                                                                   // 210
+  }                                                                                                                    // 211
+};                                                                                                                     // 212
+                                                                                                                       // 213
+exports.Entry = Entry;                                                                                                 // 214
+                                                                                                                       // 215
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }],"utils.js":function(require,exports){
@@ -591,53 +601,44 @@ exports.Entry = Entry;                                                          
 //                                                                                                                     //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
-var hasOwn = Object.prototype.hasOwnProperty;                                                                          // 1
-var objToStr = Object.prototype.toString;                                                                              // 2
-var objStr = objToStr.call({});                                                                                        // 3
-                                                                                                                       // 4
-function isPlainObject(value) {                                                                                        // 5
-  return objToStr.call(value) === objStr;                                                                              // 6
-}                                                                                                                      // 7
-exports.isPlainObject = isPlainObject;                                                                                 // 8
-                                                                                                                       // 9
-exports.assign = Object.assign || function (obj) {                                                                     // 10
-  var argc = arguments.length;                                                                                         // 11
-  for (var i = 1; i < argc; ++i) {                                                                                     // 12
-    var arg = arguments[i];                                                                                            // 13
-    if (arg && typeof arg === "object") {                                                                              // 14
-      var keys = Object.keys(arg);                                                                                     // 15
-      for (var k = 0; k < keys.length; ++k) {                                                                          // 16
-        var key = keys[k];                                                                                             // 17
-        obj[key] = arg[key];                                                                                           // 18
-      }                                                                                                                // 19
-    }                                                                                                                  // 20
-  }                                                                                                                    // 21
-  return obj;                                                                                                          // 22
-};                                                                                                                     // 23
-                                                                                                                       // 24
-exports.shallowObjEqual = function(a, b) {                                                                             // 25
-  if (a === b) {                                                                                                       // 26
-    return true;                                                                                                       // 27
-  }                                                                                                                    // 28
-                                                                                                                       // 29
-  if (! isPlainObject(a) ||                                                                                            // 30
-      ! isPlainObject(b)) {                                                                                            // 31
-    return false;                                                                                                      // 32
-  }                                                                                                                    // 33
-                                                                                                                       // 34
-  var aKeys = Object.keys(a);                                                                                          // 35
-  var bKeys = Object.keys(b);                                                                                          // 36
-                                                                                                                       // 37
-  if (aKeys.length !== bKeys.length) {                                                                                 // 38
-    return false;                                                                                                      // 39
-  }                                                                                                                    // 40
-                                                                                                                       // 41
-  return aKeys.every(function (key) {                                                                                  // 42
-    return hasOwn.call(b, key) &&                                                                                      // 43
-      a[key] === b[key];                                                                                               // 44
-  });                                                                                                                  // 45
-};                                                                                                                     // 46
-                                                                                                                       // 47
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
+exports.getNamesFromPattern = function (pattern) {                                                                     // 3
+  var queue = [pattern];                                                                                               // 4
+  var names = [];                                                                                                      // 5
+                                                                                                                       // 6
+  for (var i = 0; i < queue.length; ++i) {                                                                             // 7
+    var pattern = queue[i];                                                                                            // 8
+    if (! pattern) {                                                                                                   // 9
+      continue;                                                                                                        // 10
+    }                                                                                                                  // 11
+                                                                                                                       // 12
+    switch (pattern.type) {                                                                                            // 13
+    case "Identifier":                                                                                                 // 14
+      names.push(pattern.name);                                                                                        // 15
+      break;                                                                                                           // 16
+    case "Property":                                                                                                   // 17
+    case "ObjectProperty":                                                                                             // 18
+      queue.push(pattern.value);                                                                                       // 19
+      break;                                                                                                           // 20
+    case "AssignmentPattern":                                                                                          // 21
+      queue.push(pattern.left);                                                                                        // 22
+      break;                                                                                                           // 23
+    case "ObjectPattern":                                                                                              // 24
+      queue.push.apply(queue, pattern.properties);                                                                     // 25
+      break;                                                                                                           // 26
+    case "ArrayPattern":                                                                                               // 27
+      queue.push.apply(queue, pattern.elements);                                                                       // 28
+      break;                                                                                                           // 29
+    case "RestElement":                                                                                                // 30
+      queue.push(pattern.argument);                                                                                    // 31
+      break;                                                                                                           // 32
+    }                                                                                                                  // 33
+  }                                                                                                                    // 34
+                                                                                                                       // 35
+  return names;                                                                                                        // 36
+};                                                                                                                     // 37
+                                                                                                                       // 38
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }}}}}},"meteor-node-stubs":{"package.json":function(require,exports){
@@ -649,12 +650,12 @@ exports.shallowObjEqual = function(a, b) {                                      
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
 exports.name = "meteor-node-stubs";                                                                                    // 1
-exports.version = "0.2.4";                                                                                             // 2
+exports.version = "0.2.6";                                                                                             // 2
 exports.main = "index.js";                                                                                             // 3
                                                                                                                        // 4
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-},"index.js":["./map.json",function(require,exports){
+},"index.js":["./map.json",function(require,exports,module){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                     //
@@ -667,30 +668,28 @@ var meteorAliases = {};                                                         
                                                                                                                        // 3
 Object.keys(map).forEach(function (id) {                                                                               // 4
   if (typeof map[id] === "string") {                                                                                   // 5
-    try {                                                                                                              // 6
-      exports[id] = meteorAliases[id + ".js"] =                                                                        // 7
-        require.resolve(map[id]);                                                                                      // 8
-    } catch (e) {                                                                                                      // 9
-      // Resolution can fail at runtime if the stub was not included in the                                            // 10
-      // bundle because nothing depended on it.                                                                        // 11
-    }                                                                                                                  // 12
-  } else {                                                                                                             // 13
-    exports[id] = map[id];                                                                                             // 14
-    meteorAliases[id + ".js"] = function(){};                                                                          // 15
-  }                                                                                                                    // 16
-});                                                                                                                    // 17
-                                                                                                                       // 18
-if (typeof meteorInstall === "function") {                                                                             // 19
-  meteorInstall({                                                                                                      // 20
-    // Install the aliases into a node_modules directory one level up from                                             // 21
-    // the root directory, so that they do not clutter the namespace                                                   // 22
-    // available to apps and packages.                                                                                 // 23
-    "..": {                                                                                                            // 24
-      node_modules: meteorAliases                                                                                      // 25
-    }                                                                                                                  // 26
-  });                                                                                                                  // 27
-}                                                                                                                      // 28
-                                                                                                                       // 29
+    var aliasParts = module.id.split("/");                                                                             // 6
+    aliasParts.pop();                                                                                                  // 7
+    aliasParts.push("node_modules", map[id]);                                                                          // 8
+    exports[id] = meteorAliases[id + ".js"] =                                                                          // 9
+      aliasParts.join("/");                                                                                            // 10
+  } else {                                                                                                             // 11
+    exports[id] = map[id];                                                                                             // 12
+    meteorAliases[id + ".js"] = function(){};                                                                          // 13
+  }                                                                                                                    // 14
+});                                                                                                                    // 15
+                                                                                                                       // 16
+if (typeof meteorInstall === "function") {                                                                             // 17
+  meteorInstall({                                                                                                      // 18
+    // Install the aliases into a node_modules directory one level up from                                             // 19
+    // the root directory, so that they do not clutter the namespace                                                   // 20
+    // available to apps and packages.                                                                                 // 21
+    "..": {                                                                                                            // 22
+      node_modules: meteorAliases                                                                                      // 23
+    }                                                                                                                  // 24
+  });                                                                                                                  // 25
+}                                                                                                                      // 26
+                                                                                                                       // 27
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }],"map.json":function(require,exports,module){
@@ -3496,7 +3495,26 @@ module.exports = require("regenerator-runtime");                                
                                                                                                                        // 2
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-}]},"helpers":{"typeof.js":["../core-js/symbol/iterator","../core-js/symbol",function(require,exports){
+}]},"helpers":{"classCallCheck.js":function(require,exports){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/babel-runtime/helpers/classCallCheck.js                                                                //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
+exports.__esModule = true;                                                                                             // 3
+                                                                                                                       // 4
+exports.default = function (instance, Constructor) {                                                                   // 5
+  if (!(instance instanceof Constructor)) {                                                                            // 6
+    throw new TypeError("Cannot call a class as a function");                                                          // 7
+  }                                                                                                                    // 8
+};                                                                                                                     // 9
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+},"typeof.js":["../core-js/symbol/iterator","../core-js/symbol",function(require,exports){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                     //
@@ -3527,6 +3545,76 @@ exports.default = typeof _symbol2.default === "function" && _typeof(_iterator2.d
 };                                                                                                                     // 21
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+}],"possibleConstructorReturn.js":["../helpers/typeof",function(require,exports){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/babel-runtime/helpers/possibleConstructorReturn.js                                                     //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
+exports.__esModule = true;                                                                                             // 3
+                                                                                                                       // 4
+var _typeof2 = require("../helpers/typeof");                                                                           // 5
+                                                                                                                       // 6
+var _typeof3 = _interopRequireDefault(_typeof2);                                                                       // 7
+                                                                                                                       // 8
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }                        // 9
+                                                                                                                       // 10
+exports.default = function (self, call) {                                                                              // 11
+  if (!self) {                                                                                                         // 12
+    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");                             // 13
+  }                                                                                                                    // 14
+                                                                                                                       // 15
+  return call && ((typeof call === "undefined" ? "undefined" : (0, _typeof3.default)(call)) === "object" || typeof call === "function") ? call : self;
+};                                                                                                                     // 17
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"inherits.js":["../core-js/object/set-prototype-of","../core-js/object/create","../helpers/typeof",function(require,exports){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/babel-runtime/helpers/inherits.js                                                                      //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+"use strict";                                                                                                          // 1
+                                                                                                                       // 2
+exports.__esModule = true;                                                                                             // 3
+                                                                                                                       // 4
+var _setPrototypeOf = require("../core-js/object/set-prototype-of");                                                   // 5
+                                                                                                                       // 6
+var _setPrototypeOf2 = _interopRequireDefault(_setPrototypeOf);                                                        // 7
+                                                                                                                       // 8
+var _create = require("../core-js/object/create");                                                                     // 9
+                                                                                                                       // 10
+var _create2 = _interopRequireDefault(_create);                                                                        // 11
+                                                                                                                       // 12
+var _typeof2 = require("../helpers/typeof");                                                                           // 13
+                                                                                                                       // 14
+var _typeof3 = _interopRequireDefault(_typeof2);                                                                       // 15
+                                                                                                                       // 16
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }                        // 17
+                                                                                                                       // 18
+exports.default = function (subClass, superClass) {                                                                    // 19
+  if (typeof superClass !== "function" && superClass !== null) {                                                       // 20
+    throw new TypeError("Super expression must either be null or a function, not " + (typeof superClass === "undefined" ? "undefined" : (0, _typeof3.default)(superClass)));
+  }                                                                                                                    // 22
+                                                                                                                       // 23
+  subClass.prototype = (0, _create2.default)(superClass && superClass.prototype, {                                     // 24
+    constructor: {                                                                                                     // 25
+      value: subClass,                                                                                                 // 26
+      enumerable: false,                                                                                               // 27
+      writable: true,                                                                                                  // 28
+      configurable: true                                                                                               // 29
+    }                                                                                                                  // 30
+  });                                                                                                                  // 31
+  if (superClass) _setPrototypeOf2.default ? (0, _setPrototypeOf2.default)(subClass, superClass) : subClass.__proto__ = superClass;
+};                                                                                                                     // 33
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 }]},"core-js":{"symbol":{"iterator.js":["core-js/library/fn/symbol/iterator",function(require,exports,module){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3549,7 +3637,29 @@ module.exports = { "default": require("core-js/library/fn/symbol/iterator"), __e
 module.exports = { "default": require("core-js/library/fn/symbol"), __esModule: true };                                // 1
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-}]}},"regenerator-runtime":{"package.json":function(require,exports,module){
+}],"object":{"set-prototype-of.js":["core-js/library/fn/object/set-prototype-of",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/babel-runtime/core-js/object/set-prototype-of.js                                                       //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+module.exports = { "default": require("core-js/library/fn/object/set-prototype-of"), __esModule: true };               // 1
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"create.js":["core-js/library/fn/object/create",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/babel-runtime/core-js/object/create.js                                                                 //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+module.exports = { "default": require("core-js/library/fn/object/create"), __esModule: true };                         // 1
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}]}}},"regenerator-runtime":{"package.json":function(require,exports,module){
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                                                                                                     //
@@ -3558,7 +3668,7 @@ module.exports = { "default": require("core-js/library/fn/symbol"), __esModule: 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
 exports.name = "regenerator-runtime";                                                                                  // 1
-exports.version = "0.10.1";                                                                                            // 2
+exports.version = "0.10.5";                                                                                            // 2
 exports.main = "runtime-module.js";                                                                                    // 3
                                                                                                                        // 4
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3631,672 +3741,725 @@ if (hadRuntime) {                                                               
   var undefined; // More compressible than void 0.                                                                     // 16
   var $Symbol = typeof Symbol === "function" ? Symbol : {};                                                            // 17
   var iteratorSymbol = $Symbol.iterator || "@@iterator";                                                               // 18
-  var toStringTagSymbol = $Symbol.toStringTag || "@@toStringTag";                                                      // 19
-                                                                                                                       // 20
-  var inModule = typeof module === "object";                                                                           // 21
-  var runtime = global.regeneratorRuntime;                                                                             // 22
-  if (runtime) {                                                                                                       // 23
-    if (inModule) {                                                                                                    // 24
-      // If regeneratorRuntime is defined globally and we're in a module,                                              // 25
-      // make the exports object identical to regeneratorRuntime.                                                      // 26
-      module.exports = runtime;                                                                                        // 27
-    }                                                                                                                  // 28
-    // Don't bother evaluating the rest of this file if the runtime was                                                // 29
-    // already defined globally.                                                                                       // 30
-    return;                                                                                                            // 31
-  }                                                                                                                    // 32
-                                                                                                                       // 33
-  // Define the runtime globally (as expected by generated code) as either                                             // 34
-  // module.exports (if we're in a module) or a new, empty object.                                                     // 35
-  runtime = global.regeneratorRuntime = inModule ? module.exports : {};                                                // 36
-                                                                                                                       // 37
-  function wrap(innerFn, outerFn, self, tryLocsList) {                                                                 // 38
-    // If outerFn provided and outerFn.prototype is a Generator, then outerFn.prototype instanceof Generator.          // 39
-    var protoGenerator = outerFn && outerFn.prototype instanceof Generator ? outerFn : Generator;                      // 40
-    var generator = Object.create(protoGenerator.prototype);                                                           // 41
-    var context = new Context(tryLocsList || []);                                                                      // 42
-                                                                                                                       // 43
-    // The ._invoke method unifies the implementations of the .next,                                                   // 44
-    // .throw, and .return methods.                                                                                    // 45
-    generator._invoke = makeInvokeMethod(innerFn, self, context);                                                      // 46
-                                                                                                                       // 47
-    return generator;                                                                                                  // 48
-  }                                                                                                                    // 49
-  runtime.wrap = wrap;                                                                                                 // 50
-                                                                                                                       // 51
-  // Try/catch helper to minimize deoptimizations. Returns a completion                                                // 52
-  // record like context.tryEntries[i].completion. This interface could                                                // 53
-  // have been (and was previously) designed to take a closure to be                                                   // 54
-  // invoked without arguments, but in all the cases we care about we                                                  // 55
-  // already have an existing method we want to call, so there's no need                                               // 56
-  // to create a new function object. We can even get away with assuming                                               // 57
-  // the method takes exactly one argument, since that happens to be true                                              // 58
-  // in every case, so we don't have to touch the arguments object. The                                                // 59
-  // only additional allocation required is the completion record, which                                               // 60
-  // has a stable shape and so hopefully should be cheap to allocate.                                                  // 61
-  function tryCatch(fn, obj, arg) {                                                                                    // 62
-    try {                                                                                                              // 63
-      return { type: "normal", arg: fn.call(obj, arg) };                                                               // 64
-    } catch (err) {                                                                                                    // 65
-      return { type: "throw", arg: err };                                                                              // 66
-    }                                                                                                                  // 67
-  }                                                                                                                    // 68
-                                                                                                                       // 69
-  var GenStateSuspendedStart = "suspendedStart";                                                                       // 70
-  var GenStateSuspendedYield = "suspendedYield";                                                                       // 71
-  var GenStateExecuting = "executing";                                                                                 // 72
-  var GenStateCompleted = "completed";                                                                                 // 73
-                                                                                                                       // 74
-  // Returning this object from the innerFn has the same effect as                                                     // 75
-  // breaking out of the dispatch switch statement.                                                                    // 76
-  var ContinueSentinel = {};                                                                                           // 77
-                                                                                                                       // 78
-  // Dummy constructor functions that we use as the .constructor and                                                   // 79
-  // .constructor.prototype properties for functions that return Generator                                             // 80
-  // objects. For full spec compliance, you may wish to configure your                                                 // 81
-  // minifier not to mangle the names of these two functions.                                                          // 82
-  function Generator() {}                                                                                              // 83
-  function GeneratorFunction() {}                                                                                      // 84
-  function GeneratorFunctionPrototype() {}                                                                             // 85
-                                                                                                                       // 86
-  // This is a polyfill for %IteratorPrototype% for environments that                                                  // 87
-  // don't natively support it.                                                                                        // 88
-  var IteratorPrototype = {};                                                                                          // 89
-  IteratorPrototype[iteratorSymbol] = function () {                                                                    // 90
-    return this;                                                                                                       // 91
-  };                                                                                                                   // 92
-                                                                                                                       // 93
-  var getProto = Object.getPrototypeOf;                                                                                // 94
-  var NativeIteratorPrototype = getProto && getProto(getProto(values([])));                                            // 95
-  if (NativeIteratorPrototype &&                                                                                       // 96
-      NativeIteratorPrototype !== Op &&                                                                                // 97
-      hasOwn.call(NativeIteratorPrototype, iteratorSymbol)) {                                                          // 98
-    // This environment has a native %IteratorPrototype%; use it instead                                               // 99
-    // of the polyfill.                                                                                                // 100
-    IteratorPrototype = NativeIteratorPrototype;                                                                       // 101
-  }                                                                                                                    // 102
-                                                                                                                       // 103
-  var Gp = GeneratorFunctionPrototype.prototype =                                                                      // 104
-    Generator.prototype = Object.create(IteratorPrototype);                                                            // 105
-  GeneratorFunction.prototype = Gp.constructor = GeneratorFunctionPrototype;                                           // 106
-  GeneratorFunctionPrototype.constructor = GeneratorFunction;                                                          // 107
-  GeneratorFunctionPrototype[toStringTagSymbol] =                                                                      // 108
-    GeneratorFunction.displayName = "GeneratorFunction";                                                               // 109
-                                                                                                                       // 110
-  // Helper for defining the .next, .throw, and .return methods of the                                                 // 111
-  // Iterator interface in terms of a single ._invoke method.                                                          // 112
-  function defineIteratorMethods(prototype) {                                                                          // 113
-    ["next", "throw", "return"].forEach(function(method) {                                                             // 114
-      prototype[method] = function(arg) {                                                                              // 115
-        return this._invoke(method, arg);                                                                              // 116
-      };                                                                                                               // 117
-    });                                                                                                                // 118
-  }                                                                                                                    // 119
-                                                                                                                       // 120
-  runtime.isGeneratorFunction = function(genFun) {                                                                     // 121
-    var ctor = typeof genFun === "function" && genFun.constructor;                                                     // 122
-    return ctor                                                                                                        // 123
-      ? ctor === GeneratorFunction ||                                                                                  // 124
-        // For the native GeneratorFunction constructor, the best we can                                               // 125
-        // do is to check its .name property.                                                                          // 126
-        (ctor.displayName || ctor.name) === "GeneratorFunction"                                                        // 127
-      : false;                                                                                                         // 128
-  };                                                                                                                   // 129
-                                                                                                                       // 130
-  runtime.mark = function(genFun) {                                                                                    // 131
-    if (Object.setPrototypeOf) {                                                                                       // 132
-      Object.setPrototypeOf(genFun, GeneratorFunctionPrototype);                                                       // 133
-    } else {                                                                                                           // 134
-      genFun.__proto__ = GeneratorFunctionPrototype;                                                                   // 135
-      if (!(toStringTagSymbol in genFun)) {                                                                            // 136
-        genFun[toStringTagSymbol] = "GeneratorFunction";                                                               // 137
-      }                                                                                                                // 138
-    }                                                                                                                  // 139
-    genFun.prototype = Object.create(Gp);                                                                              // 140
-    return genFun;                                                                                                     // 141
-  };                                                                                                                   // 142
-                                                                                                                       // 143
-  // Within the body of any async function, `await x` is transformed to                                                // 144
-  // `yield regeneratorRuntime.awrap(x)`, so that the runtime can test                                                 // 145
-  // `hasOwn.call(value, "__await")` to determine if the yielded value is                                              // 146
-  // meant to be awaited.                                                                                              // 147
-  runtime.awrap = function(arg) {                                                                                      // 148
-    return { __await: arg };                                                                                           // 149
-  };                                                                                                                   // 150
-                                                                                                                       // 151
-  function AsyncIterator(generator) {                                                                                  // 152
-    function invoke(method, arg, resolve, reject) {                                                                    // 153
-      var record = tryCatch(generator[method], generator, arg);                                                        // 154
-      if (record.type === "throw") {                                                                                   // 155
-        reject(record.arg);                                                                                            // 156
-      } else {                                                                                                         // 157
-        var result = record.arg;                                                                                       // 158
-        var value = result.value;                                                                                      // 159
-        if (value &&                                                                                                   // 160
-            typeof value === "object" &&                                                                               // 161
-            hasOwn.call(value, "__await")) {                                                                           // 162
-          return Promise.resolve(value.__await).then(function(value) {                                                 // 163
-            invoke("next", value, resolve, reject);                                                                    // 164
-          }, function(err) {                                                                                           // 165
-            invoke("throw", err, resolve, reject);                                                                     // 166
-          });                                                                                                          // 167
-        }                                                                                                              // 168
-                                                                                                                       // 169
-        return Promise.resolve(value).then(function(unwrapped) {                                                       // 170
-          // When a yielded Promise is resolved, its final value becomes                                               // 171
-          // the .value of the Promise<{value,done}> result for the                                                    // 172
-          // current iteration. If the Promise is rejected, however, the                                               // 173
-          // result for this iteration will be rejected with the same                                                  // 174
-          // reason. Note that rejections of yielded Promises are not                                                  // 175
-          // thrown back into the generator function, as is the case                                                   // 176
-          // when an awaited Promise is rejected. This difference in                                                   // 177
-          // behavior between yield and await is important, because it                                                 // 178
-          // allows the consumer to decide what to do with the yielded                                                 // 179
-          // rejection (swallow it and continue, manually .throw it back                                               // 180
-          // into the generator, abandon iteration, whatever). With                                                    // 181
-          // await, by contrast, there is no opportunity to examine the                                                // 182
-          // rejection reason outside the generator function, so the                                                   // 183
-          // only option is to throw it from the await expression, and                                                 // 184
-          // let the generator function handle the exception.                                                          // 185
-          result.value = unwrapped;                                                                                    // 186
-          resolve(result);                                                                                             // 187
-        }, reject);                                                                                                    // 188
-      }                                                                                                                // 189
-    }                                                                                                                  // 190
-                                                                                                                       // 191
-    if (typeof process === "object" && process.domain) {                                                               // 192
-      invoke = process.domain.bind(invoke);                                                                            // 193
-    }                                                                                                                  // 194
-                                                                                                                       // 195
-    var previousPromise;                                                                                               // 196
-                                                                                                                       // 197
-    function enqueue(method, arg) {                                                                                    // 198
-      function callInvokeWithMethodAndArg() {                                                                          // 199
-        return new Promise(function(resolve, reject) {                                                                 // 200
-          invoke(method, arg, resolve, reject);                                                                        // 201
-        });                                                                                                            // 202
-      }                                                                                                                // 203
-                                                                                                                       // 204
-      return previousPromise =                                                                                         // 205
-        // If enqueue has been called before, then we want to wait until                                               // 206
-        // all previous Promises have been resolved before calling invoke,                                             // 207
-        // so that results are always delivered in the correct order. If                                               // 208
-        // enqueue has not been called before, then it is important to                                                 // 209
-        // call invoke immediately, without waiting on a callback to fire,                                             // 210
-        // so that the async generator function has the opportunity to do                                              // 211
-        // any necessary setup in a predictable way. This predictability                                               // 212
-        // is why the Promise constructor synchronously invokes its                                                    // 213
-        // executor callback, and why async functions synchronously                                                    // 214
-        // execute code before the first await. Since we implement simple                                              // 215
-        // async functions in terms of async generators, it is especially                                              // 216
-        // important to get this right, even though it requires care.                                                  // 217
-        previousPromise ? previousPromise.then(                                                                        // 218
-          callInvokeWithMethodAndArg,                                                                                  // 219
-          // Avoid propagating failures to Promises returned by later                                                  // 220
-          // invocations of the iterator.                                                                              // 221
-          callInvokeWithMethodAndArg                                                                                   // 222
-        ) : callInvokeWithMethodAndArg();                                                                              // 223
-    }                                                                                                                  // 224
-                                                                                                                       // 225
-    // Define the unified helper method that is used to implement .next,                                               // 226
-    // .throw, and .return (see defineIteratorMethods).                                                                // 227
-    this._invoke = enqueue;                                                                                            // 228
-  }                                                                                                                    // 229
-                                                                                                                       // 230
-  defineIteratorMethods(AsyncIterator.prototype);                                                                      // 231
-  runtime.AsyncIterator = AsyncIterator;                                                                               // 232
-                                                                                                                       // 233
-  // Note that simple async functions are implemented on top of                                                        // 234
-  // AsyncIterator objects; they just return a Promise for the value of                                                // 235
-  // the final result produced by the iterator.                                                                        // 236
-  runtime.async = function(innerFn, outerFn, self, tryLocsList) {                                                      // 237
-    var iter = new AsyncIterator(                                                                                      // 238
-      wrap(innerFn, outerFn, self, tryLocsList)                                                                        // 239
-    );                                                                                                                 // 240
-                                                                                                                       // 241
-    return runtime.isGeneratorFunction(outerFn)                                                                        // 242
-      ? iter // If outerFn is a generator, return the full iterator.                                                   // 243
-      : iter.next().then(function(result) {                                                                            // 244
-          return result.done ? result.value : iter.next();                                                             // 245
-        });                                                                                                            // 246
-  };                                                                                                                   // 247
-                                                                                                                       // 248
-  function makeInvokeMethod(innerFn, self, context) {                                                                  // 249
-    var state = GenStateSuspendedStart;                                                                                // 250
-                                                                                                                       // 251
-    return function invoke(method, arg) {                                                                              // 252
-      if (state === GenStateExecuting) {                                                                               // 253
-        throw new Error("Generator is already running");                                                               // 254
-      }                                                                                                                // 255
-                                                                                                                       // 256
-      if (state === GenStateCompleted) {                                                                               // 257
-        if (method === "throw") {                                                                                      // 258
-          throw arg;                                                                                                   // 259
-        }                                                                                                              // 260
-                                                                                                                       // 261
-        // Be forgiving, per 25.3.3.3.3 of the spec:                                                                   // 262
-        // https://people.mozilla.org/~jorendorff/es6-draft.html#sec-generatorresume                                   // 263
-        return doneResult();                                                                                           // 264
-      }                                                                                                                // 265
-                                                                                                                       // 266
-      while (true) {                                                                                                   // 267
-        var delegate = context.delegate;                                                                               // 268
-        if (delegate) {                                                                                                // 269
-          if (method === "return" ||                                                                                   // 270
-              (method === "throw" && delegate.iterator[method] === undefined)) {                                       // 271
-            // A return or throw (when the delegate iterator has no throw                                              // 272
-            // method) always terminates the yield* loop.                                                              // 273
-            context.delegate = null;                                                                                   // 274
-                                                                                                                       // 275
-            // If the delegate iterator has a return method, give it a                                                 // 276
-            // chance to clean up.                                                                                     // 277
-            var returnMethod = delegate.iterator["return"];                                                            // 278
-            if (returnMethod) {                                                                                        // 279
-              var record = tryCatch(returnMethod, delegate.iterator, arg);                                             // 280
-              if (record.type === "throw") {                                                                           // 281
-                // If the return method threw an exception, let that                                                   // 282
-                // exception prevail over the original return or throw.                                                // 283
-                method = "throw";                                                                                      // 284
-                arg = record.arg;                                                                                      // 285
-                continue;                                                                                              // 286
-              }                                                                                                        // 287
-            }                                                                                                          // 288
-                                                                                                                       // 289
-            if (method === "return") {                                                                                 // 290
-              // Continue with the outer return, now that the delegate                                                 // 291
-              // iterator has been terminated.                                                                         // 292
-              continue;                                                                                                // 293
-            }                                                                                                          // 294
-          }                                                                                                            // 295
+  var asyncIteratorSymbol = $Symbol.asyncIterator || "@@asyncIterator";                                                // 19
+  var toStringTagSymbol = $Symbol.toStringTag || "@@toStringTag";                                                      // 20
+                                                                                                                       // 21
+  var inModule = typeof module === "object";                                                                           // 22
+  var runtime = global.regeneratorRuntime;                                                                             // 23
+  if (runtime) {                                                                                                       // 24
+    if (inModule) {                                                                                                    // 25
+      // If regeneratorRuntime is defined globally and we're in a module,                                              // 26
+      // make the exports object identical to regeneratorRuntime.                                                      // 27
+      module.exports = runtime;                                                                                        // 28
+    }                                                                                                                  // 29
+    // Don't bother evaluating the rest of this file if the runtime was                                                // 30
+    // already defined globally.                                                                                       // 31
+    return;                                                                                                            // 32
+  }                                                                                                                    // 33
+                                                                                                                       // 34
+  // Define the runtime globally (as expected by generated code) as either                                             // 35
+  // module.exports (if we're in a module) or a new, empty object.                                                     // 36
+  runtime = global.regeneratorRuntime = inModule ? module.exports : {};                                                // 37
+                                                                                                                       // 38
+  function wrap(innerFn, outerFn, self, tryLocsList) {                                                                 // 39
+    // If outerFn provided and outerFn.prototype is a Generator, then outerFn.prototype instanceof Generator.          // 40
+    var protoGenerator = outerFn && outerFn.prototype instanceof Generator ? outerFn : Generator;                      // 41
+    var generator = Object.create(protoGenerator.prototype);                                                           // 42
+    var context = new Context(tryLocsList || []);                                                                      // 43
+                                                                                                                       // 44
+    // The ._invoke method unifies the implementations of the .next,                                                   // 45
+    // .throw, and .return methods.                                                                                    // 46
+    generator._invoke = makeInvokeMethod(innerFn, self, context);                                                      // 47
+                                                                                                                       // 48
+    return generator;                                                                                                  // 49
+  }                                                                                                                    // 50
+  runtime.wrap = wrap;                                                                                                 // 51
+                                                                                                                       // 52
+  // Try/catch helper to minimize deoptimizations. Returns a completion                                                // 53
+  // record like context.tryEntries[i].completion. This interface could                                                // 54
+  // have been (and was previously) designed to take a closure to be                                                   // 55
+  // invoked without arguments, but in all the cases we care about we                                                  // 56
+  // already have an existing method we want to call, so there's no need                                               // 57
+  // to create a new function object. We can even get away with assuming                                               // 58
+  // the method takes exactly one argument, since that happens to be true                                              // 59
+  // in every case, so we don't have to touch the arguments object. The                                                // 60
+  // only additional allocation required is the completion record, which                                               // 61
+  // has a stable shape and so hopefully should be cheap to allocate.                                                  // 62
+  function tryCatch(fn, obj, arg) {                                                                                    // 63
+    try {                                                                                                              // 64
+      return { type: "normal", arg: fn.call(obj, arg) };                                                               // 65
+    } catch (err) {                                                                                                    // 66
+      return { type: "throw", arg: err };                                                                              // 67
+    }                                                                                                                  // 68
+  }                                                                                                                    // 69
+                                                                                                                       // 70
+  var GenStateSuspendedStart = "suspendedStart";                                                                       // 71
+  var GenStateSuspendedYield = "suspendedYield";                                                                       // 72
+  var GenStateExecuting = "executing";                                                                                 // 73
+  var GenStateCompleted = "completed";                                                                                 // 74
+                                                                                                                       // 75
+  // Returning this object from the innerFn has the same effect as                                                     // 76
+  // breaking out of the dispatch switch statement.                                                                    // 77
+  var ContinueSentinel = {};                                                                                           // 78
+                                                                                                                       // 79
+  // Dummy constructor functions that we use as the .constructor and                                                   // 80
+  // .constructor.prototype properties for functions that return Generator                                             // 81
+  // objects. For full spec compliance, you may wish to configure your                                                 // 82
+  // minifier not to mangle the names of these two functions.                                                          // 83
+  function Generator() {}                                                                                              // 84
+  function GeneratorFunction() {}                                                                                      // 85
+  function GeneratorFunctionPrototype() {}                                                                             // 86
+                                                                                                                       // 87
+  // This is a polyfill for %IteratorPrototype% for environments that                                                  // 88
+  // don't natively support it.                                                                                        // 89
+  var IteratorPrototype = {};                                                                                          // 90
+  IteratorPrototype[iteratorSymbol] = function () {                                                                    // 91
+    return this;                                                                                                       // 92
+  };                                                                                                                   // 93
+                                                                                                                       // 94
+  var getProto = Object.getPrototypeOf;                                                                                // 95
+  var NativeIteratorPrototype = getProto && getProto(getProto(values([])));                                            // 96
+  if (NativeIteratorPrototype &&                                                                                       // 97
+      NativeIteratorPrototype !== Op &&                                                                                // 98
+      hasOwn.call(NativeIteratorPrototype, iteratorSymbol)) {                                                          // 99
+    // This environment has a native %IteratorPrototype%; use it instead                                               // 100
+    // of the polyfill.                                                                                                // 101
+    IteratorPrototype = NativeIteratorPrototype;                                                                       // 102
+  }                                                                                                                    // 103
+                                                                                                                       // 104
+  var Gp = GeneratorFunctionPrototype.prototype =                                                                      // 105
+    Generator.prototype = Object.create(IteratorPrototype);                                                            // 106
+  GeneratorFunction.prototype = Gp.constructor = GeneratorFunctionPrototype;                                           // 107
+  GeneratorFunctionPrototype.constructor = GeneratorFunction;                                                          // 108
+  GeneratorFunctionPrototype[toStringTagSymbol] =                                                                      // 109
+    GeneratorFunction.displayName = "GeneratorFunction";                                                               // 110
+                                                                                                                       // 111
+  // Helper for defining the .next, .throw, and .return methods of the                                                 // 112
+  // Iterator interface in terms of a single ._invoke method.                                                          // 113
+  function defineIteratorMethods(prototype) {                                                                          // 114
+    ["next", "throw", "return"].forEach(function(method) {                                                             // 115
+      prototype[method] = function(arg) {                                                                              // 116
+        return this._invoke(method, arg);                                                                              // 117
+      };                                                                                                               // 118
+    });                                                                                                                // 119
+  }                                                                                                                    // 120
+                                                                                                                       // 121
+  runtime.isGeneratorFunction = function(genFun) {                                                                     // 122
+    var ctor = typeof genFun === "function" && genFun.constructor;                                                     // 123
+    return ctor                                                                                                        // 124
+      ? ctor === GeneratorFunction ||                                                                                  // 125
+        // For the native GeneratorFunction constructor, the best we can                                               // 126
+        // do is to check its .name property.                                                                          // 127
+        (ctor.displayName || ctor.name) === "GeneratorFunction"                                                        // 128
+      : false;                                                                                                         // 129
+  };                                                                                                                   // 130
+                                                                                                                       // 131
+  runtime.mark = function(genFun) {                                                                                    // 132
+    if (Object.setPrototypeOf) {                                                                                       // 133
+      Object.setPrototypeOf(genFun, GeneratorFunctionPrototype);                                                       // 134
+    } else {                                                                                                           // 135
+      genFun.__proto__ = GeneratorFunctionPrototype;                                                                   // 136
+      if (!(toStringTagSymbol in genFun)) {                                                                            // 137
+        genFun[toStringTagSymbol] = "GeneratorFunction";                                                               // 138
+      }                                                                                                                // 139
+    }                                                                                                                  // 140
+    genFun.prototype = Object.create(Gp);                                                                              // 141
+    return genFun;                                                                                                     // 142
+  };                                                                                                                   // 143
+                                                                                                                       // 144
+  // Within the body of any async function, `await x` is transformed to                                                // 145
+  // `yield regeneratorRuntime.awrap(x)`, so that the runtime can test                                                 // 146
+  // `hasOwn.call(value, "__await")` to determine if the yielded value is                                              // 147
+  // meant to be awaited.                                                                                              // 148
+  runtime.awrap = function(arg) {                                                                                      // 149
+    return { __await: arg };                                                                                           // 150
+  };                                                                                                                   // 151
+                                                                                                                       // 152
+  function AsyncIterator(generator) {                                                                                  // 153
+    function invoke(method, arg, resolve, reject) {                                                                    // 154
+      var record = tryCatch(generator[method], generator, arg);                                                        // 155
+      if (record.type === "throw") {                                                                                   // 156
+        reject(record.arg);                                                                                            // 157
+      } else {                                                                                                         // 158
+        var result = record.arg;                                                                                       // 159
+        var value = result.value;                                                                                      // 160
+        if (value &&                                                                                                   // 161
+            typeof value === "object" &&                                                                               // 162
+            hasOwn.call(value, "__await")) {                                                                           // 163
+          return Promise.resolve(value.__await).then(function(value) {                                                 // 164
+            invoke("next", value, resolve, reject);                                                                    // 165
+          }, function(err) {                                                                                           // 166
+            invoke("throw", err, resolve, reject);                                                                     // 167
+          });                                                                                                          // 168
+        }                                                                                                              // 169
+                                                                                                                       // 170
+        return Promise.resolve(value).then(function(unwrapped) {                                                       // 171
+          // When a yielded Promise is resolved, its final value becomes                                               // 172
+          // the .value of the Promise<{value,done}> result for the                                                    // 173
+          // current iteration. If the Promise is rejected, however, the                                               // 174
+          // result for this iteration will be rejected with the same                                                  // 175
+          // reason. Note that rejections of yielded Promises are not                                                  // 176
+          // thrown back into the generator function, as is the case                                                   // 177
+          // when an awaited Promise is rejected. This difference in                                                   // 178
+          // behavior between yield and await is important, because it                                                 // 179
+          // allows the consumer to decide what to do with the yielded                                                 // 180
+          // rejection (swallow it and continue, manually .throw it back                                               // 181
+          // into the generator, abandon iteration, whatever). With                                                    // 182
+          // await, by contrast, there is no opportunity to examine the                                                // 183
+          // rejection reason outside the generator function, so the                                                   // 184
+          // only option is to throw it from the await expression, and                                                 // 185
+          // let the generator function handle the exception.                                                          // 186
+          result.value = unwrapped;                                                                                    // 187
+          resolve(result);                                                                                             // 188
+        }, reject);                                                                                                    // 189
+      }                                                                                                                // 190
+    }                                                                                                                  // 191
+                                                                                                                       // 192
+    if (typeof global.process === "object" && global.process.domain) {                                                 // 193
+      invoke = global.process.domain.bind(invoke);                                                                     // 194
+    }                                                                                                                  // 195
+                                                                                                                       // 196
+    var previousPromise;                                                                                               // 197
+                                                                                                                       // 198
+    function enqueue(method, arg) {                                                                                    // 199
+      function callInvokeWithMethodAndArg() {                                                                          // 200
+        return new Promise(function(resolve, reject) {                                                                 // 201
+          invoke(method, arg, resolve, reject);                                                                        // 202
+        });                                                                                                            // 203
+      }                                                                                                                // 204
+                                                                                                                       // 205
+      return previousPromise =                                                                                         // 206
+        // If enqueue has been called before, then we want to wait until                                               // 207
+        // all previous Promises have been resolved before calling invoke,                                             // 208
+        // so that results are always delivered in the correct order. If                                               // 209
+        // enqueue has not been called before, then it is important to                                                 // 210
+        // call invoke immediately, without waiting on a callback to fire,                                             // 211
+        // so that the async generator function has the opportunity to do                                              // 212
+        // any necessary setup in a predictable way. This predictability                                               // 213
+        // is why the Promise constructor synchronously invokes its                                                    // 214
+        // executor callback, and why async functions synchronously                                                    // 215
+        // execute code before the first await. Since we implement simple                                              // 216
+        // async functions in terms of async generators, it is especially                                              // 217
+        // important to get this right, even though it requires care.                                                  // 218
+        previousPromise ? previousPromise.then(                                                                        // 219
+          callInvokeWithMethodAndArg,                                                                                  // 220
+          // Avoid propagating failures to Promises returned by later                                                  // 221
+          // invocations of the iterator.                                                                              // 222
+          callInvokeWithMethodAndArg                                                                                   // 223
+        ) : callInvokeWithMethodAndArg();                                                                              // 224
+    }                                                                                                                  // 225
+                                                                                                                       // 226
+    // Define the unified helper method that is used to implement .next,                                               // 227
+    // .throw, and .return (see defineIteratorMethods).                                                                // 228
+    this._invoke = enqueue;                                                                                            // 229
+  }                                                                                                                    // 230
+                                                                                                                       // 231
+  defineIteratorMethods(AsyncIterator.prototype);                                                                      // 232
+  AsyncIterator.prototype[asyncIteratorSymbol] = function () {                                                         // 233
+    return this;                                                                                                       // 234
+  };                                                                                                                   // 235
+  runtime.AsyncIterator = AsyncIterator;                                                                               // 236
+                                                                                                                       // 237
+  // Note that simple async functions are implemented on top of                                                        // 238
+  // AsyncIterator objects; they just return a Promise for the value of                                                // 239
+  // the final result produced by the iterator.                                                                        // 240
+  runtime.async = function(innerFn, outerFn, self, tryLocsList) {                                                      // 241
+    var iter = new AsyncIterator(                                                                                      // 242
+      wrap(innerFn, outerFn, self, tryLocsList)                                                                        // 243
+    );                                                                                                                 // 244
+                                                                                                                       // 245
+    return runtime.isGeneratorFunction(outerFn)                                                                        // 246
+      ? iter // If outerFn is a generator, return the full iterator.                                                   // 247
+      : iter.next().then(function(result) {                                                                            // 248
+          return result.done ? result.value : iter.next();                                                             // 249
+        });                                                                                                            // 250
+  };                                                                                                                   // 251
+                                                                                                                       // 252
+  function makeInvokeMethod(innerFn, self, context) {                                                                  // 253
+    var state = GenStateSuspendedStart;                                                                                // 254
+                                                                                                                       // 255
+    return function invoke(method, arg) {                                                                              // 256
+      if (state === GenStateExecuting) {                                                                               // 257
+        throw new Error("Generator is already running");                                                               // 258
+      }                                                                                                                // 259
+                                                                                                                       // 260
+      if (state === GenStateCompleted) {                                                                               // 261
+        if (method === "throw") {                                                                                      // 262
+          throw arg;                                                                                                   // 263
+        }                                                                                                              // 264
+                                                                                                                       // 265
+        // Be forgiving, per 25.3.3.3.3 of the spec:                                                                   // 266
+        // https://people.mozilla.org/~jorendorff/es6-draft.html#sec-generatorresume                                   // 267
+        return doneResult();                                                                                           // 268
+      }                                                                                                                // 269
+                                                                                                                       // 270
+      context.method = method;                                                                                         // 271
+      context.arg = arg;                                                                                               // 272
+                                                                                                                       // 273
+      while (true) {                                                                                                   // 274
+        var delegate = context.delegate;                                                                               // 275
+        if (delegate) {                                                                                                // 276
+          var delegateResult = maybeInvokeDelegate(delegate, context);                                                 // 277
+          if (delegateResult) {                                                                                        // 278
+            if (delegateResult === ContinueSentinel) continue;                                                         // 279
+            return delegateResult;                                                                                     // 280
+          }                                                                                                            // 281
+        }                                                                                                              // 282
+                                                                                                                       // 283
+        if (context.method === "next") {                                                                               // 284
+          // Setting context._sent for legacy support of Babel's                                                       // 285
+          // function.sent implementation.                                                                             // 286
+          context.sent = context._sent = context.arg;                                                                  // 287
+                                                                                                                       // 288
+        } else if (context.method === "throw") {                                                                       // 289
+          if (state === GenStateSuspendedStart) {                                                                      // 290
+            state = GenStateCompleted;                                                                                 // 291
+            throw context.arg;                                                                                         // 292
+          }                                                                                                            // 293
+                                                                                                                       // 294
+          context.dispatchException(context.arg);                                                                      // 295
                                                                                                                        // 296
-          var record = tryCatch(                                                                                       // 297
-            delegate.iterator[method],                                                                                 // 298
-            delegate.iterator,                                                                                         // 299
-            arg                                                                                                        // 300
-          );                                                                                                           // 301
+        } else if (context.method === "return") {                                                                      // 297
+          context.abrupt("return", context.arg);                                                                       // 298
+        }                                                                                                              // 299
+                                                                                                                       // 300
+        state = GenStateExecuting;                                                                                     // 301
                                                                                                                        // 302
-          if (record.type === "throw") {                                                                               // 303
-            context.delegate = null;                                                                                   // 304
-                                                                                                                       // 305
-            // Like returning generator.throw(uncaught), but without the                                               // 306
-            // overhead of an extra function call.                                                                     // 307
-            method = "throw";                                                                                          // 308
-            arg = record.arg;                                                                                          // 309
-            continue;                                                                                                  // 310
-          }                                                                                                            // 311
-                                                                                                                       // 312
-          // Delegate generator ran and handled its own exceptions so                                                  // 313
-          // regardless of what the method was, we continue as if it is                                                // 314
-          // "next" with an undefined arg.                                                                             // 315
-          method = "next";                                                                                             // 316
-          arg = undefined;                                                                                             // 317
-                                                                                                                       // 318
-          var info = record.arg;                                                                                       // 319
-          if (info.done) {                                                                                             // 320
-            context[delegate.resultName] = info.value;                                                                 // 321
-            context.next = delegate.nextLoc;                                                                           // 322
-          } else {                                                                                                     // 323
-            state = GenStateSuspendedYield;                                                                            // 324
-            return info;                                                                                               // 325
-          }                                                                                                            // 326
-                                                                                                                       // 327
-          context.delegate = null;                                                                                     // 328
-        }                                                                                                              // 329
+        var record = tryCatch(innerFn, self, context);                                                                 // 303
+        if (record.type === "normal") {                                                                                // 304
+          // If an exception is thrown from innerFn, we leave state ===                                                // 305
+          // GenStateExecuting and loop back for another invocation.                                                   // 306
+          state = context.done                                                                                         // 307
+            ? GenStateCompleted                                                                                        // 308
+            : GenStateSuspendedYield;                                                                                  // 309
+                                                                                                                       // 310
+          if (record.arg === ContinueSentinel) {                                                                       // 311
+            continue;                                                                                                  // 312
+          }                                                                                                            // 313
+                                                                                                                       // 314
+          return {                                                                                                     // 315
+            value: record.arg,                                                                                         // 316
+            done: context.done                                                                                         // 317
+          };                                                                                                           // 318
+                                                                                                                       // 319
+        } else if (record.type === "throw") {                                                                          // 320
+          state = GenStateCompleted;                                                                                   // 321
+          // Dispatch the exception by looping back around to the                                                      // 322
+          // context.dispatchException(context.arg) call above.                                                        // 323
+          context.method = "throw";                                                                                    // 324
+          context.arg = record.arg;                                                                                    // 325
+        }                                                                                                              // 326
+      }                                                                                                                // 327
+    };                                                                                                                 // 328
+  }                                                                                                                    // 329
                                                                                                                        // 330
-        if (method === "next") {                                                                                       // 331
-          // Setting context._sent for legacy support of Babel's                                                       // 332
-          // function.sent implementation.                                                                             // 333
-          context.sent = context._sent = arg;                                                                          // 334
-                                                                                                                       // 335
-        } else if (method === "throw") {                                                                               // 336
-          if (state === GenStateSuspendedStart) {                                                                      // 337
-            state = GenStateCompleted;                                                                                 // 338
-            throw arg;                                                                                                 // 339
-          }                                                                                                            // 340
+  // Call delegate.iterator[context.method](context.arg) and handle the                                                // 331
+  // result, either by returning a { value, done } result from the                                                     // 332
+  // delegate iterator, or by modifying context.method and context.arg,                                                // 333
+  // setting context.delegate to null, and returning the ContinueSentinel.                                             // 334
+  function maybeInvokeDelegate(delegate, context) {                                                                    // 335
+    var method = delegate.iterator[context.method];                                                                    // 336
+    if (method === undefined) {                                                                                        // 337
+      // A .throw or .return when the delegate iterator has no .throw                                                  // 338
+      // method always terminates the yield* loop.                                                                     // 339
+      context.delegate = null;                                                                                         // 340
                                                                                                                        // 341
-          if (context.dispatchException(arg)) {                                                                        // 342
-            // If the dispatched exception was caught by a catch block,                                                // 343
-            // then let that catch block handle the exception normally.                                                // 344
-            method = "next";                                                                                           // 345
-            arg = undefined;                                                                                           // 346
-          }                                                                                                            // 347
-                                                                                                                       // 348
-        } else if (method === "return") {                                                                              // 349
-          context.abrupt("return", arg);                                                                               // 350
-        }                                                                                                              // 351
-                                                                                                                       // 352
-        state = GenStateExecuting;                                                                                     // 353
-                                                                                                                       // 354
-        var record = tryCatch(innerFn, self, context);                                                                 // 355
-        if (record.type === "normal") {                                                                                // 356
-          // If an exception is thrown from innerFn, we leave state ===                                                // 357
-          // GenStateExecuting and loop back for another invocation.                                                   // 358
-          state = context.done                                                                                         // 359
-            ? GenStateCompleted                                                                                        // 360
-            : GenStateSuspendedYield;                                                                                  // 361
-                                                                                                                       // 362
-          var info = {                                                                                                 // 363
-            value: record.arg,                                                                                         // 364
-            done: context.done                                                                                         // 365
-          };                                                                                                           // 366
-                                                                                                                       // 367
-          if (record.arg === ContinueSentinel) {                                                                       // 368
-            if (context.delegate && method === "next") {                                                               // 369
-              // Deliberately forget the last sent value so that we don't                                              // 370
-              // accidentally pass it on to the delegate.                                                              // 371
-              arg = undefined;                                                                                         // 372
-            }                                                                                                          // 373
-          } else {                                                                                                     // 374
-            return info;                                                                                               // 375
-          }                                                                                                            // 376
-                                                                                                                       // 377
-        } else if (record.type === "throw") {                                                                          // 378
-          state = GenStateCompleted;                                                                                   // 379
-          // Dispatch the exception by looping back around to the                                                      // 380
-          // context.dispatchException(arg) call above.                                                                // 381
-          method = "throw";                                                                                            // 382
-          arg = record.arg;                                                                                            // 383
-        }                                                                                                              // 384
-      }                                                                                                                // 385
-    };                                                                                                                 // 386
-  }                                                                                                                    // 387
-                                                                                                                       // 388
-  // Define Generator.prototype.{next,throw,return} in terms of the                                                    // 389
-  // unified ._invoke helper method.                                                                                   // 390
-  defineIteratorMethods(Gp);                                                                                           // 391
-                                                                                                                       // 392
-  Gp[toStringTagSymbol] = "Generator";                                                                                 // 393
-                                                                                                                       // 394
-  Gp.toString = function() {                                                                                           // 395
-    return "[object Generator]";                                                                                       // 396
-  };                                                                                                                   // 397
-                                                                                                                       // 398
-  function pushTryEntry(locs) {                                                                                        // 399
-    var entry = { tryLoc: locs[0] };                                                                                   // 400
+      if (context.method === "throw") {                                                                                // 342
+        if (delegate.iterator.return) {                                                                                // 343
+          // If the delegate iterator has a return method, give it a                                                   // 344
+          // chance to clean up.                                                                                       // 345
+          context.method = "return";                                                                                   // 346
+          context.arg = undefined;                                                                                     // 347
+          maybeInvokeDelegate(delegate, context);                                                                      // 348
+                                                                                                                       // 349
+          if (context.method === "throw") {                                                                            // 350
+            // If maybeInvokeDelegate(context) changed context.method from                                             // 351
+            // "return" to "throw", let that override the TypeError below.                                             // 352
+            return ContinueSentinel;                                                                                   // 353
+          }                                                                                                            // 354
+        }                                                                                                              // 355
+                                                                                                                       // 356
+        context.method = "throw";                                                                                      // 357
+        context.arg = new TypeError(                                                                                   // 358
+          "The iterator does not provide a 'throw' method");                                                           // 359
+      }                                                                                                                // 360
+                                                                                                                       // 361
+      return ContinueSentinel;                                                                                         // 362
+    }                                                                                                                  // 363
+                                                                                                                       // 364
+    var record = tryCatch(method, delegate.iterator, context.arg);                                                     // 365
+                                                                                                                       // 366
+    if (record.type === "throw") {                                                                                     // 367
+      context.method = "throw";                                                                                        // 368
+      context.arg = record.arg;                                                                                        // 369
+      context.delegate = null;                                                                                         // 370
+      return ContinueSentinel;                                                                                         // 371
+    }                                                                                                                  // 372
+                                                                                                                       // 373
+    var info = record.arg;                                                                                             // 374
+                                                                                                                       // 375
+    if (! info) {                                                                                                      // 376
+      context.method = "throw";                                                                                        // 377
+      context.arg = new TypeError("iterator result is not an object");                                                 // 378
+      context.delegate = null;                                                                                         // 379
+      return ContinueSentinel;                                                                                         // 380
+    }                                                                                                                  // 381
+                                                                                                                       // 382
+    if (info.done) {                                                                                                   // 383
+      // Assign the result of the finished delegate to the temporary                                                   // 384
+      // variable specified by delegate.resultName (see delegateYield).                                                // 385
+      context[delegate.resultName] = info.value;                                                                       // 386
+                                                                                                                       // 387
+      // Resume execution at the desired location (see delegateYield).                                                 // 388
+      context.next = delegate.nextLoc;                                                                                 // 389
+                                                                                                                       // 390
+      // If context.method was "throw" but the delegate handled the                                                    // 391
+      // exception, let the outer generator proceed normally. If                                                       // 392
+      // context.method was "next", forget context.arg since it has been                                               // 393
+      // "consumed" by the delegate iterator. If context.method was                                                    // 394
+      // "return", allow the original .return call to continue in the                                                  // 395
+      // outer generator.                                                                                              // 396
+      if (context.method !== "return") {                                                                               // 397
+        context.method = "next";                                                                                       // 398
+        context.arg = undefined;                                                                                       // 399
+      }                                                                                                                // 400
                                                                                                                        // 401
-    if (1 in locs) {                                                                                                   // 402
-      entry.catchLoc = locs[1];                                                                                        // 403
-    }                                                                                                                  // 404
-                                                                                                                       // 405
-    if (2 in locs) {                                                                                                   // 406
-      entry.finallyLoc = locs[2];                                                                                      // 407
-      entry.afterLoc = locs[3];                                                                                        // 408
-    }                                                                                                                  // 409
-                                                                                                                       // 410
-    this.tryEntries.push(entry);                                                                                       // 411
-  }                                                                                                                    // 412
-                                                                                                                       // 413
-  function resetTryEntry(entry) {                                                                                      // 414
-    var record = entry.completion || {};                                                                               // 415
-    record.type = "normal";                                                                                            // 416
-    delete record.arg;                                                                                                 // 417
-    entry.completion = record;                                                                                         // 418
-  }                                                                                                                    // 419
-                                                                                                                       // 420
-  function Context(tryLocsList) {                                                                                      // 421
-    // The root entry object (effectively a try statement without a catch                                              // 422
-    // or a finally block) gives us a place to store values thrown from                                                // 423
-    // locations where there is no enclosing try statement.                                                            // 424
-    this.tryEntries = [{ tryLoc: "root" }];                                                                            // 425
-    tryLocsList.forEach(pushTryEntry, this);                                                                           // 426
-    this.reset(true);                                                                                                  // 427
-  }                                                                                                                    // 428
-                                                                                                                       // 429
-  runtime.keys = function(object) {                                                                                    // 430
-    var keys = [];                                                                                                     // 431
-    for (var key in object) {                                                                                          // 432
-      keys.push(key);                                                                                                  // 433
-    }                                                                                                                  // 434
-    keys.reverse();                                                                                                    // 435
-                                                                                                                       // 436
-    // Rather than returning an object with a next method, we keep                                                     // 437
-    // things simple and return the next function itself.                                                              // 438
-    return function next() {                                                                                           // 439
-      while (keys.length) {                                                                                            // 440
-        var key = keys.pop();                                                                                          // 441
-        if (key in object) {                                                                                           // 442
-          next.value = key;                                                                                            // 443
-          next.done = false;                                                                                           // 444
-          return next;                                                                                                 // 445
-        }                                                                                                              // 446
-      }                                                                                                                // 447
-                                                                                                                       // 448
-      // To avoid creating an additional object, we just hang the .value                                               // 449
-      // and .done properties off the next function object itself. This                                                // 450
-      // also ensures that the minifier will not anonymize the function.                                               // 451
-      next.done = true;                                                                                                // 452
-      return next;                                                                                                     // 453
-    };                                                                                                                 // 454
-  };                                                                                                                   // 455
-                                                                                                                       // 456
-  function values(iterable) {                                                                                          // 457
-    if (iterable) {                                                                                                    // 458
-      var iteratorMethod = iterable[iteratorSymbol];                                                                   // 459
-      if (iteratorMethod) {                                                                                            // 460
-        return iteratorMethod.call(iterable);                                                                          // 461
-      }                                                                                                                // 462
-                                                                                                                       // 463
-      if (typeof iterable.next === "function") {                                                                       // 464
-        return iterable;                                                                                               // 465
-      }                                                                                                                // 466
-                                                                                                                       // 467
-      if (!isNaN(iterable.length)) {                                                                                   // 468
-        var i = -1, next = function next() {                                                                           // 469
-          while (++i < iterable.length) {                                                                              // 470
-            if (hasOwn.call(iterable, i)) {                                                                            // 471
-              next.value = iterable[i];                                                                                // 472
-              next.done = false;                                                                                       // 473
-              return next;                                                                                             // 474
-            }                                                                                                          // 475
-          }                                                                                                            // 476
-                                                                                                                       // 477
-          next.value = undefined;                                                                                      // 478
-          next.done = true;                                                                                            // 479
-                                                                                                                       // 480
-          return next;                                                                                                 // 481
-        };                                                                                                             // 482
-                                                                                                                       // 483
-        return next.next = next;                                                                                       // 484
-      }                                                                                                                // 485
-    }                                                                                                                  // 486
-                                                                                                                       // 487
-    // Return an iterator with no values.                                                                              // 488
-    return { next: doneResult };                                                                                       // 489
-  }                                                                                                                    // 490
-  runtime.values = values;                                                                                             // 491
-                                                                                                                       // 492
-  function doneResult() {                                                                                              // 493
-    return { value: undefined, done: true };                                                                           // 494
-  }                                                                                                                    // 495
+    } else {                                                                                                           // 402
+      // Re-yield the result returned by the delegate method.                                                          // 403
+      return info;                                                                                                     // 404
+    }                                                                                                                  // 405
+                                                                                                                       // 406
+    // The delegate iterator is finished, so forget it and continue with                                               // 407
+    // the outer generator.                                                                                            // 408
+    context.delegate = null;                                                                                           // 409
+    return ContinueSentinel;                                                                                           // 410
+  }                                                                                                                    // 411
+                                                                                                                       // 412
+  // Define Generator.prototype.{next,throw,return} in terms of the                                                    // 413
+  // unified ._invoke helper method.                                                                                   // 414
+  defineIteratorMethods(Gp);                                                                                           // 415
+                                                                                                                       // 416
+  Gp[toStringTagSymbol] = "Generator";                                                                                 // 417
+                                                                                                                       // 418
+  // A Generator should always return itself as the iterator object when the                                           // 419
+  // @@iterator function is called on it. Some browsers' implementations of the                                        // 420
+  // iterator prototype chain incorrectly implement this, causing the Generator                                        // 421
+  // object to not be returned from this call. This ensures that doesn't happen.                                       // 422
+  // See https://github.com/facebook/regenerator/issues/274 for more details.                                          // 423
+  Gp[iteratorSymbol] = function() {                                                                                    // 424
+    return this;                                                                                                       // 425
+  };                                                                                                                   // 426
+                                                                                                                       // 427
+  Gp.toString = function() {                                                                                           // 428
+    return "[object Generator]";                                                                                       // 429
+  };                                                                                                                   // 430
+                                                                                                                       // 431
+  function pushTryEntry(locs) {                                                                                        // 432
+    var entry = { tryLoc: locs[0] };                                                                                   // 433
+                                                                                                                       // 434
+    if (1 in locs) {                                                                                                   // 435
+      entry.catchLoc = locs[1];                                                                                        // 436
+    }                                                                                                                  // 437
+                                                                                                                       // 438
+    if (2 in locs) {                                                                                                   // 439
+      entry.finallyLoc = locs[2];                                                                                      // 440
+      entry.afterLoc = locs[3];                                                                                        // 441
+    }                                                                                                                  // 442
+                                                                                                                       // 443
+    this.tryEntries.push(entry);                                                                                       // 444
+  }                                                                                                                    // 445
+                                                                                                                       // 446
+  function resetTryEntry(entry) {                                                                                      // 447
+    var record = entry.completion || {};                                                                               // 448
+    record.type = "normal";                                                                                            // 449
+    delete record.arg;                                                                                                 // 450
+    entry.completion = record;                                                                                         // 451
+  }                                                                                                                    // 452
+                                                                                                                       // 453
+  function Context(tryLocsList) {                                                                                      // 454
+    // The root entry object (effectively a try statement without a catch                                              // 455
+    // or a finally block) gives us a place to store values thrown from                                                // 456
+    // locations where there is no enclosing try statement.                                                            // 457
+    this.tryEntries = [{ tryLoc: "root" }];                                                                            // 458
+    tryLocsList.forEach(pushTryEntry, this);                                                                           // 459
+    this.reset(true);                                                                                                  // 460
+  }                                                                                                                    // 461
+                                                                                                                       // 462
+  runtime.keys = function(object) {                                                                                    // 463
+    var keys = [];                                                                                                     // 464
+    for (var key in object) {                                                                                          // 465
+      keys.push(key);                                                                                                  // 466
+    }                                                                                                                  // 467
+    keys.reverse();                                                                                                    // 468
+                                                                                                                       // 469
+    // Rather than returning an object with a next method, we keep                                                     // 470
+    // things simple and return the next function itself.                                                              // 471
+    return function next() {                                                                                           // 472
+      while (keys.length) {                                                                                            // 473
+        var key = keys.pop();                                                                                          // 474
+        if (key in object) {                                                                                           // 475
+          next.value = key;                                                                                            // 476
+          next.done = false;                                                                                           // 477
+          return next;                                                                                                 // 478
+        }                                                                                                              // 479
+      }                                                                                                                // 480
+                                                                                                                       // 481
+      // To avoid creating an additional object, we just hang the .value                                               // 482
+      // and .done properties off the next function object itself. This                                                // 483
+      // also ensures that the minifier will not anonymize the function.                                               // 484
+      next.done = true;                                                                                                // 485
+      return next;                                                                                                     // 486
+    };                                                                                                                 // 487
+  };                                                                                                                   // 488
+                                                                                                                       // 489
+  function values(iterable) {                                                                                          // 490
+    if (iterable) {                                                                                                    // 491
+      var iteratorMethod = iterable[iteratorSymbol];                                                                   // 492
+      if (iteratorMethod) {                                                                                            // 493
+        return iteratorMethod.call(iterable);                                                                          // 494
+      }                                                                                                                // 495
                                                                                                                        // 496
-  Context.prototype = {                                                                                                // 497
-    constructor: Context,                                                                                              // 498
-                                                                                                                       // 499
-    reset: function(skipTempReset) {                                                                                   // 500
-      this.prev = 0;                                                                                                   // 501
-      this.next = 0;                                                                                                   // 502
-      // Resetting context._sent for legacy support of Babel's                                                         // 503
-      // function.sent implementation.                                                                                 // 504
-      this.sent = this._sent = undefined;                                                                              // 505
-      this.done = false;                                                                                               // 506
-      this.delegate = null;                                                                                            // 507
-                                                                                                                       // 508
-      this.tryEntries.forEach(resetTryEntry);                                                                          // 509
+      if (typeof iterable.next === "function") {                                                                       // 497
+        return iterable;                                                                                               // 498
+      }                                                                                                                // 499
+                                                                                                                       // 500
+      if (!isNaN(iterable.length)) {                                                                                   // 501
+        var i = -1, next = function next() {                                                                           // 502
+          while (++i < iterable.length) {                                                                              // 503
+            if (hasOwn.call(iterable, i)) {                                                                            // 504
+              next.value = iterable[i];                                                                                // 505
+              next.done = false;                                                                                       // 506
+              return next;                                                                                             // 507
+            }                                                                                                          // 508
+          }                                                                                                            // 509
                                                                                                                        // 510
-      if (!skipTempReset) {                                                                                            // 511
-        for (var name in this) {                                                                                       // 512
-          // Not sure about the optimal order of these conditions:                                                     // 513
-          if (name.charAt(0) === "t" &&                                                                                // 514
-              hasOwn.call(this, name) &&                                                                               // 515
-              !isNaN(+name.slice(1))) {                                                                                // 516
-            this[name] = undefined;                                                                                    // 517
-          }                                                                                                            // 518
-        }                                                                                                              // 519
-      }                                                                                                                // 520
-    },                                                                                                                 // 521
-                                                                                                                       // 522
-    stop: function() {                                                                                                 // 523
-      this.done = true;                                                                                                // 524
+          next.value = undefined;                                                                                      // 511
+          next.done = true;                                                                                            // 512
+                                                                                                                       // 513
+          return next;                                                                                                 // 514
+        };                                                                                                             // 515
+                                                                                                                       // 516
+        return next.next = next;                                                                                       // 517
+      }                                                                                                                // 518
+    }                                                                                                                  // 519
+                                                                                                                       // 520
+    // Return an iterator with no values.                                                                              // 521
+    return { next: doneResult };                                                                                       // 522
+  }                                                                                                                    // 523
+  runtime.values = values;                                                                                             // 524
                                                                                                                        // 525
-      var rootEntry = this.tryEntries[0];                                                                              // 526
-      var rootRecord = rootEntry.completion;                                                                           // 527
-      if (rootRecord.type === "throw") {                                                                               // 528
-        throw rootRecord.arg;                                                                                          // 529
-      }                                                                                                                // 530
-                                                                                                                       // 531
-      return this.rval;                                                                                                // 532
-    },                                                                                                                 // 533
-                                                                                                                       // 534
-    dispatchException: function(exception) {                                                                           // 535
-      if (this.done) {                                                                                                 // 536
-        throw exception;                                                                                               // 537
-      }                                                                                                                // 538
-                                                                                                                       // 539
-      var context = this;                                                                                              // 540
-      function handle(loc, caught) {                                                                                   // 541
-        record.type = "throw";                                                                                         // 542
-        record.arg = exception;                                                                                        // 543
-        context.next = loc;                                                                                            // 544
-        return !!caught;                                                                                               // 545
-      }                                                                                                                // 546
-                                                                                                                       // 547
-      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 548
-        var entry = this.tryEntries[i];                                                                                // 549
-        var record = entry.completion;                                                                                 // 550
-                                                                                                                       // 551
-        if (entry.tryLoc === "root") {                                                                                 // 552
-          // Exception thrown outside of any try block that could handle                                               // 553
-          // it, so set the completion value of the entire function to                                                 // 554
-          // throw the exception.                                                                                      // 555
-          return handle("end");                                                                                        // 556
-        }                                                                                                              // 557
+  function doneResult() {                                                                                              // 526
+    return { value: undefined, done: true };                                                                           // 527
+  }                                                                                                                    // 528
+                                                                                                                       // 529
+  Context.prototype = {                                                                                                // 530
+    constructor: Context,                                                                                              // 531
+                                                                                                                       // 532
+    reset: function(skipTempReset) {                                                                                   // 533
+      this.prev = 0;                                                                                                   // 534
+      this.next = 0;                                                                                                   // 535
+      // Resetting context._sent for legacy support of Babel's                                                         // 536
+      // function.sent implementation.                                                                                 // 537
+      this.sent = this._sent = undefined;                                                                              // 538
+      this.done = false;                                                                                               // 539
+      this.delegate = null;                                                                                            // 540
+                                                                                                                       // 541
+      this.method = "next";                                                                                            // 542
+      this.arg = undefined;                                                                                            // 543
+                                                                                                                       // 544
+      this.tryEntries.forEach(resetTryEntry);                                                                          // 545
+                                                                                                                       // 546
+      if (!skipTempReset) {                                                                                            // 547
+        for (var name in this) {                                                                                       // 548
+          // Not sure about the optimal order of these conditions:                                                     // 549
+          if (name.charAt(0) === "t" &&                                                                                // 550
+              hasOwn.call(this, name) &&                                                                               // 551
+              !isNaN(+name.slice(1))) {                                                                                // 552
+            this[name] = undefined;                                                                                    // 553
+          }                                                                                                            // 554
+        }                                                                                                              // 555
+      }                                                                                                                // 556
+    },                                                                                                                 // 557
                                                                                                                        // 558
-        if (entry.tryLoc <= this.prev) {                                                                               // 559
-          var hasCatch = hasOwn.call(entry, "catchLoc");                                                               // 560
-          var hasFinally = hasOwn.call(entry, "finallyLoc");                                                           // 561
-                                                                                                                       // 562
-          if (hasCatch && hasFinally) {                                                                                // 563
-            if (this.prev < entry.catchLoc) {                                                                          // 564
-              return handle(entry.catchLoc, true);                                                                     // 565
-            } else if (this.prev < entry.finallyLoc) {                                                                 // 566
-              return handle(entry.finallyLoc);                                                                         // 567
-            }                                                                                                          // 568
-                                                                                                                       // 569
-          } else if (hasCatch) {                                                                                       // 570
-            if (this.prev < entry.catchLoc) {                                                                          // 571
-              return handle(entry.catchLoc, true);                                                                     // 572
-            }                                                                                                          // 573
-                                                                                                                       // 574
-          } else if (hasFinally) {                                                                                     // 575
-            if (this.prev < entry.finallyLoc) {                                                                        // 576
-              return handle(entry.finallyLoc);                                                                         // 577
-            }                                                                                                          // 578
-                                                                                                                       // 579
-          } else {                                                                                                     // 580
-            throw new Error("try statement without catch or finally");                                                 // 581
-          }                                                                                                            // 582
-        }                                                                                                              // 583
-      }                                                                                                                // 584
-    },                                                                                                                 // 585
-                                                                                                                       // 586
-    abrupt: function(type, arg) {                                                                                      // 587
-      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 588
-        var entry = this.tryEntries[i];                                                                                // 589
-        if (entry.tryLoc <= this.prev &&                                                                               // 590
-            hasOwn.call(entry, "finallyLoc") &&                                                                        // 591
-            this.prev < entry.finallyLoc) {                                                                            // 592
-          var finallyEntry = entry;                                                                                    // 593
-          break;                                                                                                       // 594
-        }                                                                                                              // 595
-      }                                                                                                                // 596
-                                                                                                                       // 597
-      if (finallyEntry &&                                                                                              // 598
-          (type === "break" ||                                                                                         // 599
-           type === "continue") &&                                                                                     // 600
-          finallyEntry.tryLoc <= arg &&                                                                                // 601
-          arg <= finallyEntry.finallyLoc) {                                                                            // 602
-        // Ignore the finally entry if control is not jumping to a                                                     // 603
-        // location outside the try/catch block.                                                                       // 604
-        finallyEntry = null;                                                                                           // 605
-      }                                                                                                                // 606
-                                                                                                                       // 607
-      var record = finallyEntry ? finallyEntry.completion : {};                                                        // 608
-      record.type = type;                                                                                              // 609
-      record.arg = arg;                                                                                                // 610
-                                                                                                                       // 611
-      if (finallyEntry) {                                                                                              // 612
-        this.next = finallyEntry.finallyLoc;                                                                           // 613
-      } else {                                                                                                         // 614
-        this.complete(record);                                                                                         // 615
-      }                                                                                                                // 616
-                                                                                                                       // 617
-      return ContinueSentinel;                                                                                         // 618
-    },                                                                                                                 // 619
-                                                                                                                       // 620
-    complete: function(record, afterLoc) {                                                                             // 621
-      if (record.type === "throw") {                                                                                   // 622
-        throw record.arg;                                                                                              // 623
-      }                                                                                                                // 624
-                                                                                                                       // 625
-      if (record.type === "break" ||                                                                                   // 626
-          record.type === "continue") {                                                                                // 627
-        this.next = record.arg;                                                                                        // 628
-      } else if (record.type === "return") {                                                                           // 629
-        this.rval = record.arg;                                                                                        // 630
-        this.next = "end";                                                                                             // 631
-      } else if (record.type === "normal" && afterLoc) {                                                               // 632
-        this.next = afterLoc;                                                                                          // 633
-      }                                                                                                                // 634
-    },                                                                                                                 // 635
-                                                                                                                       // 636
-    finish: function(finallyLoc) {                                                                                     // 637
-      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 638
-        var entry = this.tryEntries[i];                                                                                // 639
-        if (entry.finallyLoc === finallyLoc) {                                                                         // 640
-          this.complete(entry.completion, entry.afterLoc);                                                             // 641
-          resetTryEntry(entry);                                                                                        // 642
-          return ContinueSentinel;                                                                                     // 643
-        }                                                                                                              // 644
-      }                                                                                                                // 645
-    },                                                                                                                 // 646
-                                                                                                                       // 647
-    "catch": function(tryLoc) {                                                                                        // 648
-      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 649
-        var entry = this.tryEntries[i];                                                                                // 650
-        if (entry.tryLoc === tryLoc) {                                                                                 // 651
-          var record = entry.completion;                                                                               // 652
-          if (record.type === "throw") {                                                                               // 653
-            var thrown = record.arg;                                                                                   // 654
-            resetTryEntry(entry);                                                                                      // 655
-          }                                                                                                            // 656
-          return thrown;                                                                                               // 657
-        }                                                                                                              // 658
-      }                                                                                                                // 659
-                                                                                                                       // 660
-      // The context.catch method must only be called with a location                                                  // 661
-      // argument that corresponds to a known catch block.                                                             // 662
-      throw new Error("illegal catch attempt");                                                                        // 663
-    },                                                                                                                 // 664
-                                                                                                                       // 665
-    delegateYield: function(iterable, resultName, nextLoc) {                                                           // 666
-      this.delegate = {                                                                                                // 667
-        iterator: values(iterable),                                                                                    // 668
-        resultName: resultName,                                                                                        // 669
-        nextLoc: nextLoc                                                                                               // 670
-      };                                                                                                               // 671
-                                                                                                                       // 672
-      return ContinueSentinel;                                                                                         // 673
-    }                                                                                                                  // 674
-  };                                                                                                                   // 675
-})(                                                                                                                    // 676
-  // Among the various tricks for obtaining a reference to the global                                                  // 677
-  // object, this seems to be the most reliable technique that does not                                                // 678
-  // use indirect eval (which violates Content Security Policy).                                                       // 679
-  typeof global === "object" ? global :                                                                                // 680
-  typeof window === "object" ? window :                                                                                // 681
-  typeof self === "object" ? self : this                                                                               // 682
-);                                                                                                                     // 683
-                                                                                                                       // 684
+    stop: function() {                                                                                                 // 559
+      this.done = true;                                                                                                // 560
+                                                                                                                       // 561
+      var rootEntry = this.tryEntries[0];                                                                              // 562
+      var rootRecord = rootEntry.completion;                                                                           // 563
+      if (rootRecord.type === "throw") {                                                                               // 564
+        throw rootRecord.arg;                                                                                          // 565
+      }                                                                                                                // 566
+                                                                                                                       // 567
+      return this.rval;                                                                                                // 568
+    },                                                                                                                 // 569
+                                                                                                                       // 570
+    dispatchException: function(exception) {                                                                           // 571
+      if (this.done) {                                                                                                 // 572
+        throw exception;                                                                                               // 573
+      }                                                                                                                // 574
+                                                                                                                       // 575
+      var context = this;                                                                                              // 576
+      function handle(loc, caught) {                                                                                   // 577
+        record.type = "throw";                                                                                         // 578
+        record.arg = exception;                                                                                        // 579
+        context.next = loc;                                                                                            // 580
+                                                                                                                       // 581
+        if (caught) {                                                                                                  // 582
+          // If the dispatched exception was caught by a catch block,                                                  // 583
+          // then let that catch block handle the exception normally.                                                  // 584
+          context.method = "next";                                                                                     // 585
+          context.arg = undefined;                                                                                     // 586
+        }                                                                                                              // 587
+                                                                                                                       // 588
+        return !! caught;                                                                                              // 589
+      }                                                                                                                // 590
+                                                                                                                       // 591
+      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 592
+        var entry = this.tryEntries[i];                                                                                // 593
+        var record = entry.completion;                                                                                 // 594
+                                                                                                                       // 595
+        if (entry.tryLoc === "root") {                                                                                 // 596
+          // Exception thrown outside of any try block that could handle                                               // 597
+          // it, so set the completion value of the entire function to                                                 // 598
+          // throw the exception.                                                                                      // 599
+          return handle("end");                                                                                        // 600
+        }                                                                                                              // 601
+                                                                                                                       // 602
+        if (entry.tryLoc <= this.prev) {                                                                               // 603
+          var hasCatch = hasOwn.call(entry, "catchLoc");                                                               // 604
+          var hasFinally = hasOwn.call(entry, "finallyLoc");                                                           // 605
+                                                                                                                       // 606
+          if (hasCatch && hasFinally) {                                                                                // 607
+            if (this.prev < entry.catchLoc) {                                                                          // 608
+              return handle(entry.catchLoc, true);                                                                     // 609
+            } else if (this.prev < entry.finallyLoc) {                                                                 // 610
+              return handle(entry.finallyLoc);                                                                         // 611
+            }                                                                                                          // 612
+                                                                                                                       // 613
+          } else if (hasCatch) {                                                                                       // 614
+            if (this.prev < entry.catchLoc) {                                                                          // 615
+              return handle(entry.catchLoc, true);                                                                     // 616
+            }                                                                                                          // 617
+                                                                                                                       // 618
+          } else if (hasFinally) {                                                                                     // 619
+            if (this.prev < entry.finallyLoc) {                                                                        // 620
+              return handle(entry.finallyLoc);                                                                         // 621
+            }                                                                                                          // 622
+                                                                                                                       // 623
+          } else {                                                                                                     // 624
+            throw new Error("try statement without catch or finally");                                                 // 625
+          }                                                                                                            // 626
+        }                                                                                                              // 627
+      }                                                                                                                // 628
+    },                                                                                                                 // 629
+                                                                                                                       // 630
+    abrupt: function(type, arg) {                                                                                      // 631
+      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 632
+        var entry = this.tryEntries[i];                                                                                // 633
+        if (entry.tryLoc <= this.prev &&                                                                               // 634
+            hasOwn.call(entry, "finallyLoc") &&                                                                        // 635
+            this.prev < entry.finallyLoc) {                                                                            // 636
+          var finallyEntry = entry;                                                                                    // 637
+          break;                                                                                                       // 638
+        }                                                                                                              // 639
+      }                                                                                                                // 640
+                                                                                                                       // 641
+      if (finallyEntry &&                                                                                              // 642
+          (type === "break" ||                                                                                         // 643
+           type === "continue") &&                                                                                     // 644
+          finallyEntry.tryLoc <= arg &&                                                                                // 645
+          arg <= finallyEntry.finallyLoc) {                                                                            // 646
+        // Ignore the finally entry if control is not jumping to a                                                     // 647
+        // location outside the try/catch block.                                                                       // 648
+        finallyEntry = null;                                                                                           // 649
+      }                                                                                                                // 650
+                                                                                                                       // 651
+      var record = finallyEntry ? finallyEntry.completion : {};                                                        // 652
+      record.type = type;                                                                                              // 653
+      record.arg = arg;                                                                                                // 654
+                                                                                                                       // 655
+      if (finallyEntry) {                                                                                              // 656
+        this.method = "next";                                                                                          // 657
+        this.next = finallyEntry.finallyLoc;                                                                           // 658
+        return ContinueSentinel;                                                                                       // 659
+      }                                                                                                                // 660
+                                                                                                                       // 661
+      return this.complete(record);                                                                                    // 662
+    },                                                                                                                 // 663
+                                                                                                                       // 664
+    complete: function(record, afterLoc) {                                                                             // 665
+      if (record.type === "throw") {                                                                                   // 666
+        throw record.arg;                                                                                              // 667
+      }                                                                                                                // 668
+                                                                                                                       // 669
+      if (record.type === "break" ||                                                                                   // 670
+          record.type === "continue") {                                                                                // 671
+        this.next = record.arg;                                                                                        // 672
+      } else if (record.type === "return") {                                                                           // 673
+        this.rval = this.arg = record.arg;                                                                             // 674
+        this.method = "return";                                                                                        // 675
+        this.next = "end";                                                                                             // 676
+      } else if (record.type === "normal" && afterLoc) {                                                               // 677
+        this.next = afterLoc;                                                                                          // 678
+      }                                                                                                                // 679
+                                                                                                                       // 680
+      return ContinueSentinel;                                                                                         // 681
+    },                                                                                                                 // 682
+                                                                                                                       // 683
+    finish: function(finallyLoc) {                                                                                     // 684
+      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 685
+        var entry = this.tryEntries[i];                                                                                // 686
+        if (entry.finallyLoc === finallyLoc) {                                                                         // 687
+          this.complete(entry.completion, entry.afterLoc);                                                             // 688
+          resetTryEntry(entry);                                                                                        // 689
+          return ContinueSentinel;                                                                                     // 690
+        }                                                                                                              // 691
+      }                                                                                                                // 692
+    },                                                                                                                 // 693
+                                                                                                                       // 694
+    "catch": function(tryLoc) {                                                                                        // 695
+      for (var i = this.tryEntries.length - 1; i >= 0; --i) {                                                          // 696
+        var entry = this.tryEntries[i];                                                                                // 697
+        if (entry.tryLoc === tryLoc) {                                                                                 // 698
+          var record = entry.completion;                                                                               // 699
+          if (record.type === "throw") {                                                                               // 700
+            var thrown = record.arg;                                                                                   // 701
+            resetTryEntry(entry);                                                                                      // 702
+          }                                                                                                            // 703
+          return thrown;                                                                                               // 704
+        }                                                                                                              // 705
+      }                                                                                                                // 706
+                                                                                                                       // 707
+      // The context.catch method must only be called with a location                                                  // 708
+      // argument that corresponds to a known catch block.                                                             // 709
+      throw new Error("illegal catch attempt");                                                                        // 710
+    },                                                                                                                 // 711
+                                                                                                                       // 712
+    delegateYield: function(iterable, resultName, nextLoc) {                                                           // 713
+      this.delegate = {                                                                                                // 714
+        iterator: values(iterable),                                                                                    // 715
+        resultName: resultName,                                                                                        // 716
+        nextLoc: nextLoc                                                                                               // 717
+      };                                                                                                               // 718
+                                                                                                                       // 719
+      if (this.method === "next") {                                                                                    // 720
+        // Deliberately forget the last sent value so that we don't                                                    // 721
+        // accidentally pass it on to the delegate.                                                                    // 722
+        this.arg = undefined;                                                                                          // 723
+      }                                                                                                                // 724
+                                                                                                                       // 725
+      return ContinueSentinel;                                                                                         // 726
+    }                                                                                                                  // 727
+  };                                                                                                                   // 728
+})(                                                                                                                    // 729
+  // Among the various tricks for obtaining a reference to the global                                                  // 730
+  // object, this seems to be the most reliable technique that does not                                                // 731
+  // use indirect eval (which violates Content Security Policy).                                                       // 732
+  typeof global === "object" ? global :                                                                                // 733
+  typeof window === "object" ? window :                                                                                // 734
+  typeof self === "object" ? self : this                                                                               // 735
+);                                                                                                                     // 736
+                                                                                                                       // 737
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }},"core-js":{"library":{"fn":{"symbol":{"iterator.js":["../../modules/es6.string.iterator","../../modules/web.dom.iterable","../../modules/_wks-ext",function(require,exports,module){
@@ -4325,6 +4488,33 @@ require('../../modules/es6.object.to-string');                                  
 require('../../modules/es7.symbol.async-iterator');                                                                    // 3
 require('../../modules/es7.symbol.observable');                                                                        // 4
 module.exports = require('../../modules/_core').Symbol;                                                                // 5
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}]},"object":{"set-prototype-of.js":["../../modules/es6.object.set-prototype-of","../../modules/_core",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/core-js/library/fn/object/set-prototype-of.js                                                          //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+require('../../modules/es6.object.set-prototype-of');                                                                  // 1
+module.exports = require('../../modules/_core').Object.setPrototypeOf;                                                 // 2
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"create.js":["../../modules/es6.object.create","../../modules/_core",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/core-js/library/fn/object/create.js                                                                    //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+require('../../modules/es6.object.create');                                                                            // 1
+var $Object = require('../../modules/_core').Object;                                                                   // 2
+module.exports = function create(P, D){                                                                                // 3
+  return $Object.create(P, D);                                                                                         // 4
+};                                                                                                                     // 5
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }]}},"modules":{"es6.string.iterator.js":["./_string-at","./_iter-define",function(require){
@@ -5867,6 +6057,67 @@ require('./_wks-define')('asyncIterator');                                      
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                        //
 require('./_wks-define')('observable');                                                                                // 1
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"es6.object.set-prototype-of.js":["./_export","./_set-proto",function(require){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/core-js/library/modules/es6.object.set-prototype-of.js                                                 //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+// 19.1.3.19 Object.setPrototypeOf(O, proto)                                                                           // 1
+var $export = require('./_export');                                                                                    // 2
+$export($export.S, 'Object', {setPrototypeOf: require('./_set-proto').set});                                           // 3
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"_set-proto.js":["./_is-object","./_an-object","./_ctx","./_object-gopd",function(require,exports,module){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/core-js/library/modules/_set-proto.js                                                                  //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+// Works with __proto__ only. Old v8 can't work with null proto objects.                                               // 1
+/* eslint-disable no-proto */                                                                                          // 2
+var isObject = require('./_is-object')                                                                                 // 3
+  , anObject = require('./_an-object');                                                                                // 4
+var check = function(O, proto){                                                                                        // 5
+  anObject(O);                                                                                                         // 6
+  if(!isObject(proto) && proto !== null)throw TypeError(proto + ": can't set as prototype!");                          // 7
+};                                                                                                                     // 8
+module.exports = {                                                                                                     // 9
+  set: Object.setPrototypeOf || ('__proto__' in {} ? // eslint-disable-line                                            // 10
+    function(test, buggy, set){                                                                                        // 11
+      try {                                                                                                            // 12
+        set = require('./_ctx')(Function.call, require('./_object-gopd').f(Object.prototype, '__proto__').set, 2);     // 13
+        set(test, []);                                                                                                 // 14
+        buggy = !(test instanceof Array);                                                                              // 15
+      } catch(e){ buggy = true; }                                                                                      // 16
+      return function setPrototypeOf(O, proto){                                                                        // 17
+        check(O, proto);                                                                                               // 18
+        if(buggy)O.__proto__ = proto;                                                                                  // 19
+        else set(O, proto);                                                                                            // 20
+        return O;                                                                                                      // 21
+      };                                                                                                               // 22
+    }({}, false) : undefined),                                                                                         // 23
+  check: check                                                                                                         // 24
+};                                                                                                                     // 25
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}],"es6.object.create.js":["./_export","./_object-create",function(require){
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                     //
+// node_modules/core-js/library/modules/es6.object.create.js                                                           //
+//                                                                                                                     //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                       //
+var $export = require('./_export')                                                                                     // 1
+// 19.1.2.2 / 15.2.3.5 Object.create(O [, Properties])                                                                 // 2
+$export($export.S, 'Object', {create: require('./_object-create')});                                                   // 3
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }]}}}}},{"extensions":[".js",".json"]});

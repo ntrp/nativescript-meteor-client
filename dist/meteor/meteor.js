@@ -830,25 +830,13 @@ setTimeout(loadingCompleted);                                                   
  * @param {Function} func A function to run on startup.                                                   // 47
  */                                                                                                       // 48
 Meteor.startup = function (callback) {                                                                    // 49
-  // Fix for < IE9, see http://javascript.nwbox.com/IEContentLoaded/                                      // 50
-  var doScroll = !document.addEventListener &&                                                            // 51
-    document.documentElement.doScroll;                                                                    // 52
-                                                                                                          // 53
-  if (!doScroll || window !== top) {                                                                      // 54
-    if (isReady)                                                                                          // 55
-      callback();                                                                                         // 56
-    else                                                                                                  // 57
-      callbackQueue.push(callback);                                                                       // 58
-  } else {                                                                                                // 59
-    try { doScroll('left'); }                                                                             // 60
-    catch (error) {                                                                                       // 61
-      setTimeout(function () { Meteor.startup(callback); }, 50);                                          // 62
-      return;                                                                                             // 63
-    };                                                                                                    // 64
-    callback();                                                                                           // 65
-  }                                                                                                       // 66
-};                                                                                                        // 67
-                                                                                                          // 68
+                                                                                                          // 50
+    if (isReady)                                                                                          // 51
+      callback();                                                                                         // 52
+    else                                                                                                  // 53
+      callbackQueue.push(callback);                                                                       // 54
+};                                                                                                        // 55
+                                                                                                          // 56
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }).call(this);

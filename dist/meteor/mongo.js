@@ -428,94 +428,101 @@ Mongo.Collection._publishCursor = function (cursor, sub, collection) {          
 }; // protect against dangerous selectors.  falsey and {_id: falsey} are both                                   // 359
 // likely programmer error, and not what you want, particularly for destructive                                 // 362
 // operations.  JS regexps don't serialize over DDP but can be trivially                                        // 363
-// replaced by $regex.                                                                                          // 364
+// replaced by $regex. If a falsey _id is sent in, a new string _id will be                                     // 364
+// generated and returned; if a fallbackId is provided, it will be returned                                     // 365
+// instead.                                                                                                     // 366
                                                                                                                 //
                                                                                                                 //
-Mongo.Collection._rewriteSelector = function (selector) {                                                       // 365
-  // shorthand -- scalars match _id                                                                             // 366
-  if (LocalCollection._selectorIsId(selector)) selector = {                                                     // 367
-    _id: selector                                                                                               // 368
-  };                                                                                                            // 368
+Mongo.Collection._rewriteSelector = function (selector) {                                                       // 367
+  var _ref = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},                            // 367
+      fallbackId = _ref.fallbackId;                                                                             // 367
                                                                                                                 //
-  if (_.isArray(selector)) {                                                                                    // 370
-    // This is consistent with the Mongo console itself; if we don't do this                                    // 371
-    // check passing an empty array ends up selecting all items                                                 // 372
-    throw new Error("Mongo selector can't be an array.");                                                       // 373
-  }                                                                                                             // 374
+  // shorthand -- scalars match _id                                                                             // 368
+  if (LocalCollection._selectorIsId(selector)) selector = {                                                     // 369
+    _id: selector                                                                                               // 370
+  };                                                                                                            // 370
                                                                                                                 //
-  if (!selector || '_id' in selector && !selector._id) // can't match anything                                  // 376
-    return {                                                                                                    // 378
-      _id: Random.id()                                                                                          // 378
-    };                                                                                                          // 378
-  var ret = {};                                                                                                 // 380
+  if (_.isArray(selector)) {                                                                                    // 372
+    // This is consistent with the Mongo console itself; if we don't do this                                    // 373
+    // check passing an empty array ends up selecting all items                                                 // 374
+    throw new Error("Mongo selector can't be an array.");                                                       // 375
+  }                                                                                                             // 376
                                                                                                                 //
-  _.each(selector, function (value, key) {                                                                      // 381
-    // Mongo supports both {field: /foo/} and {field: {$regex: /foo/}}                                          // 382
-    if (value instanceof RegExp) {                                                                              // 383
-      ret[key] = convertRegexpToMongoSelector(value);                                                           // 384
-    } else if (value && value.$regex instanceof RegExp) {                                                       // 385
+  if (!selector || '_id' in selector && !selector._id) {                                                        // 378
+    // can't match anything                                                                                     // 379
+    return {                                                                                                    // 380
+      _id: fallbackId || Random.id()                                                                            // 380
+    };                                                                                                          // 380
+  }                                                                                                             // 381
+                                                                                                                //
+  var ret = {};                                                                                                 // 383
+  Object.keys(selector).forEach(function (key) {                                                                // 384
+    var value = selector[key]; // Mongo supports both {field: /foo/} and {field: {$regex: /foo/}}               // 385
+                                                                                                                //
+    if (value instanceof RegExp) {                                                                              // 387
+      ret[key] = convertRegexpToMongoSelector(value);                                                           // 388
+    } else if (value && value.$regex instanceof RegExp) {                                                       // 389
       ret[key] = convertRegexpToMongoSelector(value.$regex); // if value is {$regex: /foo/, $options: ...} then $options
-      // override the ones set on $regex.                                                                       // 388
+      // override the ones set on $regex.                                                                       // 392
                                                                                                                 //
-      if (value.$options !== undefined) ret[key].$options = value.$options;                                     // 389
-    } else if (_.contains(['$or', '$and', '$nor'], key)) {                                                      // 391
-      // Translate lower levels of $and/$or/$nor                                                                // 393
-      ret[key] = _.map(value, function (v) {                                                                    // 394
-        return Mongo.Collection._rewriteSelector(v);                                                            // 395
-      });                                                                                                       // 396
-    } else {                                                                                                    // 397
-      ret[key] = value;                                                                                         // 398
-    }                                                                                                           // 399
-  });                                                                                                           // 400
+      if (value.$options !== undefined) ret[key].$options = value.$options;                                     // 393
+    } else if (_.contains(['$or', '$and', '$nor'], key)) {                                                      // 395
+      // Translate lower levels of $and/$or/$nor                                                                // 396
+      ret[key] = _.map(value, function (v) {                                                                    // 397
+        return Mongo.Collection._rewriteSelector(v);                                                            // 398
+      });                                                                                                       // 399
+    } else {                                                                                                    // 400
+      ret[key] = value;                                                                                         // 401
+    }                                                                                                           // 402
+  });                                                                                                           // 403
+  return ret;                                                                                                   // 404
+}; // convert a JS RegExp object to a Mongo {$regex: ..., $options: ...}                                        // 405
+// selector                                                                                                     // 408
                                                                                                                 //
-  return ret;                                                                                                   // 401
-}; // convert a JS RegExp object to a Mongo {$regex: ..., $options: ...}                                        // 402
-// selector                                                                                                     // 405
                                                                                                                 //
+function convertRegexpToMongoSelector(regexp) {                                                                 // 409
+  check(regexp, RegExp); // safety belt                                                                         // 410
                                                                                                                 //
-function convertRegexpToMongoSelector(regexp) {                                                                 // 406
-  check(regexp, RegExp); // safety belt                                                                         // 407
+  var selector = {                                                                                              // 412
+    $regex: regexp.source                                                                                       // 412
+  };                                                                                                            // 412
+  var regexOptions = ''; // JS RegExp objects support 'i', 'm', and 'g'. Mongo regex $options                   // 413
+  // support 'i', 'm', 'x', and 's'. So we support 'i' and 'm' here.                                            // 415
                                                                                                                 //
-  var selector = {                                                                                              // 409
-    $regex: regexp.source                                                                                       // 409
-  };                                                                                                            // 409
-  var regexOptions = ''; // JS RegExp objects support 'i', 'm', and 'g'. Mongo regex $options                   // 410
-  // support 'i', 'm', 'x', and 's'. So we support 'i' and 'm' here.                                            // 412
-                                                                                                                //
-  if (regexp.ignoreCase) regexOptions += 'i';                                                                   // 413
-  if (regexp.multiline) regexOptions += 'm';                                                                    // 415
-  if (regexOptions) selector.$options = regexOptions;                                                           // 417
-  return selector;                                                                                              // 420
-} // 'insert' immediately returns the inserted document's new _id.                                              // 421
-// The others return values immediately if you are in a stub, an in-memory                                      // 424
-// unmanaged collection, or a mongo-backed collection and you don't pass a                                      // 425
-// callback. 'update' and 'remove' return the number of affected                                                // 426
-// documents. 'upsert' returns an object with keys 'numberAffected' and, if an                                  // 427
-// insert happened, 'insertedId'.                                                                               // 428
-//                                                                                                              // 429
-// Otherwise, the semantics are exactly like other methods: they take                                           // 430
-// a callback as an optional last argument; if no callback is                                                   // 431
-// provided, they block until the operation is complete, and throw an                                           // 432
-// exception if it fails; if a callback is provided, then they don't                                            // 433
-// necessarily block, and they call the callback when they finish with error and                                // 434
-// result arguments.  (The insert method provides the document ID as its result;                                // 435
-// update and remove provide the number of affected docs as the result; upsert                                  // 436
-// provides an object with numberAffected and maybe insertedId.)                                                // 437
-//                                                                                                              // 438
-// On the client, blocking is impossible, so if a callback                                                      // 439
-// isn't provided, they just return immediately and any error                                                   // 440
-// information is lost.                                                                                         // 441
-//                                                                                                              // 442
-// There's one more tweak. On the client, if you don't provide a                                                // 443
-// callback, then if there is an error, a message will be logged with                                           // 444
-// Meteor._debug.                                                                                               // 445
-//                                                                                                              // 446
-// The intent (though this is actually determined by the underlying                                             // 447
-// drivers) is that the operations should be done synchronously, not                                            // 448
-// generating their result until the database has acknowledged                                                  // 449
-// them. In the future maybe we should provide a flag to turn this                                              // 450
-// off.                                                                                                         // 451
-/**                                                                                                             // 453
+  if (regexp.ignoreCase) regexOptions += 'i';                                                                   // 416
+  if (regexp.multiline) regexOptions += 'm';                                                                    // 418
+  if (regexOptions) selector.$options = regexOptions;                                                           // 420
+  return selector;                                                                                              // 423
+} // 'insert' immediately returns the inserted document's new _id.                                              // 424
+// The others return values immediately if you are in a stub, an in-memory                                      // 427
+// unmanaged collection, or a mongo-backed collection and you don't pass a                                      // 428
+// callback. 'update' and 'remove' return the number of affected                                                // 429
+// documents. 'upsert' returns an object with keys 'numberAffected' and, if an                                  // 430
+// insert happened, 'insertedId'.                                                                               // 431
+//                                                                                                              // 432
+// Otherwise, the semantics are exactly like other methods: they take                                           // 433
+// a callback as an optional last argument; if no callback is                                                   // 434
+// provided, they block until the operation is complete, and throw an                                           // 435
+// exception if it fails; if a callback is provided, then they don't                                            // 436
+// necessarily block, and they call the callback when they finish with error and                                // 437
+// result arguments.  (The insert method provides the document ID as its result;                                // 438
+// update and remove provide the number of affected docs as the result; upsert                                  // 439
+// provides an object with numberAffected and maybe insertedId.)                                                // 440
+//                                                                                                              // 441
+// On the client, blocking is impossible, so if a callback                                                      // 442
+// isn't provided, they just return immediately and any error                                                   // 443
+// information is lost.                                                                                         // 444
+//                                                                                                              // 445
+// There's one more tweak. On the client, if you don't provide a                                                // 446
+// callback, then if there is an error, a message will be logged with                                           // 447
+// Meteor._debug.                                                                                               // 448
+//                                                                                                              // 449
+// The intent (though this is actually determined by the underlying                                             // 450
+// drivers) is that the operations should be done synchronously, not                                            // 451
+// generating their result until the database has acknowledged                                                  // 452
+// them. In the future maybe we should provide a flag to turn this                                              // 453
+// off.                                                                                                         // 454
+/**                                                                                                             // 456
  * @summary Insert a document in the collection.  Returns its unique _id.                                       //
  * @locus Anywhere                                                                                              //
  * @method  insert                                                                                              //
@@ -525,81 +532,81 @@ function convertRegexpToMongoSelector(regexp) {                                 
  * @param {Function} [callback] Optional.  If present, called with an error object as the first argument and, if no error, the _id as the second.
  */                                                                                                             //
                                                                                                                 //
-Mongo.Collection.prototype.insert = function () {                                                               // 462
-  function insert(doc, callback) {                                                                              // 462
-    // Make sure we were passed a document to insert                                                            // 463
-    if (!doc) {                                                                                                 // 464
-      throw new Error("insert requires an argument");                                                           // 465
-    } // Shallow-copy the document and possibly generate an ID                                                  // 466
+Mongo.Collection.prototype.insert = function () {                                                               // 465
+  function insert(doc, callback) {                                                                              // 465
+    // Make sure we were passed a document to insert                                                            // 466
+    if (!doc) {                                                                                                 // 467
+      throw new Error("insert requires an argument");                                                           // 468
+    } // Shallow-copy the document and possibly generate an ID                                                  // 469
                                                                                                                 //
                                                                                                                 //
-    doc = _.extend({}, doc);                                                                                    // 469
+    doc = _.extend({}, doc);                                                                                    // 472
                                                                                                                 //
-    if ('_id' in doc) {                                                                                         // 471
-      if (!doc._id || !(typeof doc._id === 'string' || doc._id instanceof Mongo.ObjectID)) {                    // 472
-        throw new Error("Meteor requires document _id fields to be non-empty strings or ObjectIDs");            // 473
-      }                                                                                                         // 474
-    } else {                                                                                                    // 475
-      var generateId = true; // Don't generate the id if we're the client and the 'outermost' call              // 476
-      // This optimization saves us passing both the randomSeed and the id                                      // 479
-      // Passing both is redundant.                                                                             // 480
+    if ('_id' in doc) {                                                                                         // 474
+      if (!doc._id || !(typeof doc._id === 'string' || doc._id instanceof Mongo.ObjectID)) {                    // 475
+        throw new Error("Meteor requires document _id fields to be non-empty strings or ObjectIDs");            // 476
+      }                                                                                                         // 477
+    } else {                                                                                                    // 478
+      var generateId = true; // Don't generate the id if we're the client and the 'outermost' call              // 479
+      // This optimization saves us passing both the randomSeed and the id                                      // 482
+      // Passing both is redundant.                                                                             // 483
                                                                                                                 //
-      if (this._isRemoteCollection()) {                                                                         // 481
-        var enclosing = DDP._CurrentInvocation.get();                                                           // 482
+      if (this._isRemoteCollection()) {                                                                         // 484
+        var enclosing = DDP._CurrentInvocation.get();                                                           // 485
                                                                                                                 //
-        if (!enclosing) {                                                                                       // 483
-          generateId = false;                                                                                   // 484
-        }                                                                                                       // 485
-      }                                                                                                         // 486
+        if (!enclosing) {                                                                                       // 486
+          generateId = false;                                                                                   // 487
+        }                                                                                                       // 488
+      }                                                                                                         // 489
                                                                                                                 //
-      if (generateId) {                                                                                         // 488
-        doc._id = this._makeNewID();                                                                            // 489
-      }                                                                                                         // 490
-    } // On inserts, always return the id that we generated; on all other                                       // 491
-    // operations, just return the result from the collection.                                                  // 494
-                                                                                                                //
-                                                                                                                //
-    var chooseReturnValueFromCollectionResult = function (result) {                                             // 495
-      if (doc._id) {                                                                                            // 496
-        return doc._id;                                                                                         // 497
-      } // XXX what is this for??                                                                               // 498
-      // It's some iteraction between the callback to _callMutatorMethod and                                    // 501
-      // the return value conversion                                                                            // 502
+      if (generateId) {                                                                                         // 491
+        doc._id = this._makeNewID();                                                                            // 492
+      }                                                                                                         // 493
+    } // On inserts, always return the id that we generated; on all other                                       // 494
+    // operations, just return the result from the collection.                                                  // 497
                                                                                                                 //
                                                                                                                 //
-      doc._id = result;                                                                                         // 503
-      return result;                                                                                            // 505
-    };                                                                                                          // 506
-                                                                                                                //
-    var wrappedCallback = wrapCallback(callback, chooseReturnValueFromCollectionResult);                        // 508
-                                                                                                                //
-    if (this._isRemoteCollection()) {                                                                           // 510
-      var result = this._callMutatorMethod("insert", [doc], wrappedCallback);                                   // 511
-                                                                                                                //
-      return chooseReturnValueFromCollectionResult(result);                                                     // 512
-    } // it's my collection.  descend into the collection object                                                // 513
-    // and propagate any exception.                                                                             // 516
+    var chooseReturnValueFromCollectionResult = function (result) {                                             // 498
+      if (doc._id) {                                                                                            // 499
+        return doc._id;                                                                                         // 500
+      } // XXX what is this for??                                                                               // 501
+      // It's some iteraction between the callback to _callMutatorMethod and                                    // 504
+      // the return value conversion                                                                            // 505
                                                                                                                 //
                                                                                                                 //
-    try {                                                                                                       // 517
-      // If the user provided a callback and the collection implements this                                     // 518
-      // operation asynchronously, then queryRet will be undefined, and the                                     // 519
-      // result will be returned through the callback instead.                                                  // 520
-      var _result = this._collection.insert(doc, wrappedCallback);                                              // 521
+      doc._id = result;                                                                                         // 506
+      return result;                                                                                            // 508
+    };                                                                                                          // 509
                                                                                                                 //
-      return chooseReturnValueFromCollectionResult(_result);                                                    // 522
-    } catch (e) {                                                                                               // 523
-      if (callback) {                                                                                           // 524
-        callback(e);                                                                                            // 525
-        return null;                                                                                            // 526
-      }                                                                                                         // 527
+    var wrappedCallback = wrapCallback(callback, chooseReturnValueFromCollectionResult);                        // 511
                                                                                                                 //
-      throw e;                                                                                                  // 528
-    }                                                                                                           // 529
-  }                                                                                                             // 530
+    if (this._isRemoteCollection()) {                                                                           // 513
+      var result = this._callMutatorMethod("insert", [doc], wrappedCallback);                                   // 514
                                                                                                                 //
-  return insert;                                                                                                // 462
-}(); /**                                                                                                        // 462
+      return chooseReturnValueFromCollectionResult(result);                                                     // 515
+    } // it's my collection.  descend into the collection object                                                // 516
+    // and propagate any exception.                                                                             // 519
+                                                                                                                //
+                                                                                                                //
+    try {                                                                                                       // 520
+      // If the user provided a callback and the collection implements this                                     // 521
+      // operation asynchronously, then queryRet will be undefined, and the                                     // 522
+      // result will be returned through the callback instead.                                                  // 523
+      var _result = this._collection.insert(doc, wrappedCallback);                                              // 524
+                                                                                                                //
+      return chooseReturnValueFromCollectionResult(_result);                                                    // 525
+    } catch (e) {                                                                                               // 526
+      if (callback) {                                                                                           // 527
+        callback(e);                                                                                            // 528
+        return null;                                                                                            // 529
+      }                                                                                                         // 530
+                                                                                                                //
+      throw e;                                                                                                  // 531
+    }                                                                                                           // 532
+  }                                                                                                             // 533
+                                                                                                                //
+  return insert;                                                                                                // 465
+}(); /**                                                                                                        // 465
       * @summary Modify one or more documents in the collection. Returns the number of matched documents.       //
       * @locus Anywhere                                                                                         //
       * @method update                                                                                          //
@@ -613,53 +620,58 @@ Mongo.Collection.prototype.insert = function () {                               
       * @param {Function} [callback] Optional.  If present, called with an error object as the first argument and, if no error, the number of affected documents as the second.
       */                                                                                                        //
                                                                                                                 //
-Mongo.Collection.prototype.update = function () {                                                               // 545
-  function update(selector, modifier) {                                                                         // 545
+Mongo.Collection.prototype.update = function () {                                                               // 548
+  function update(selector, modifier) {                                                                         // 548
     for (var _len = arguments.length, optionsAndCallback = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
-      optionsAndCallback[_key - 2] = arguments[_key];                                                           // 545
-    }                                                                                                           // 545
+      optionsAndCallback[_key - 2] = arguments[_key];                                                           // 548
+    }                                                                                                           // 548
                                                                                                                 //
-    var callback = popCallbackFromArgs(optionsAndCallback);                                                     // 546
-    selector = Mongo.Collection._rewriteSelector(selector); // We've already popped off the callback, so we are left with an array
-    // of one or zero items                                                                                     // 551
+    var callback = popCallbackFromArgs(optionsAndCallback); // We've already popped off the callback, so we are left with an array
+    // of one or zero items                                                                                     // 552
                                                                                                                 //
-    var options = _.clone(optionsAndCallback[0]) || {};                                                         // 552
+    var options = _.clone(optionsAndCallback[0]) || {};                                                         // 553
+    var insertedId = void 0;                                                                                    // 554
                                                                                                                 //
-    if (options && options.upsert) {                                                                            // 553
-      // set `insertedId` if absent.  `insertedId` is a Meteor extension.                                       // 554
-      if (options.insertedId) {                                                                                 // 555
+    if (options && options.upsert) {                                                                            // 555
+      // set `insertedId` if absent.  `insertedId` is a Meteor extension.                                       // 556
+      if (options.insertedId) {                                                                                 // 557
         if (!(typeof options.insertedId === 'string' || options.insertedId instanceof Mongo.ObjectID)) throw new Error("insertedId must be string or ObjectID");
-      } else if (!selector._id) {                                                                               // 558
-        options.insertedId = this._makeNewID();                                                                 // 559
-      }                                                                                                         // 560
-    }                                                                                                           // 561
+        insertedId = options.insertedId;                                                                        // 560
+      } else if (!selector || !selector._id) {                                                                  // 561
+        insertedId = this._makeNewID();                                                                         // 562
+        options.insertedId = insertedId;                                                                        // 563
+      }                                                                                                         // 564
+    }                                                                                                           // 565
                                                                                                                 //
-    var wrappedCallback = wrapCallback(callback);                                                               // 563
+    selector = Mongo.Collection._rewriteSelector(selector, {                                                    // 567
+      fallbackId: insertedId                                                                                    // 568
+    });                                                                                                         // 568
+    var wrappedCallback = wrapCallback(callback);                                                               // 570
                                                                                                                 //
-    if (this._isRemoteCollection()) {                                                                           // 565
-      var args = [selector, modifier, options];                                                                 // 566
-      return this._callMutatorMethod("update", args, wrappedCallback);                                          // 572
-    } // it's my collection.  descend into the collection object                                                // 573
-    // and propagate any exception.                                                                             // 576
+    if (this._isRemoteCollection()) {                                                                           // 572
+      var args = [selector, modifier, options];                                                                 // 573
+      return this._callMutatorMethod("update", args, wrappedCallback);                                          // 579
+    } // it's my collection.  descend into the collection object                                                // 580
+    // and propagate any exception.                                                                             // 583
                                                                                                                 //
                                                                                                                 //
-    try {                                                                                                       // 577
-      // If the user provided a callback and the collection implements this                                     // 578
-      // operation asynchronously, then queryRet will be undefined, and the                                     // 579
-      // result will be returned through the callback instead.                                                  // 580
-      return this._collection.update(selector, modifier, options, wrappedCallback);                             // 581
-    } catch (e) {                                                                                               // 583
-      if (callback) {                                                                                           // 584
-        callback(e);                                                                                            // 585
-        return null;                                                                                            // 586
-      }                                                                                                         // 587
+    try {                                                                                                       // 584
+      // If the user provided a callback and the collection implements this                                     // 585
+      // operation asynchronously, then queryRet will be undefined, and the                                     // 586
+      // result will be returned through the callback instead.                                                  // 587
+      return this._collection.update(selector, modifier, options, wrappedCallback);                             // 588
+    } catch (e) {                                                                                               // 590
+      if (callback) {                                                                                           // 591
+        callback(e);                                                                                            // 592
+        return null;                                                                                            // 593
+      }                                                                                                         // 594
                                                                                                                 //
-      throw e;                                                                                                  // 588
-    }                                                                                                           // 589
-  }                                                                                                             // 590
+      throw e;                                                                                                  // 595
+    }                                                                                                           // 596
+  }                                                                                                             // 597
                                                                                                                 //
-  return update;                                                                                                // 545
-}(); /**                                                                                                        // 545
+  return update;                                                                                                // 548
+}(); /**                                                                                                        // 548
       * @summary Remove documents from the collection                                                           //
       * @locus Anywhere                                                                                         //
       * @method remove                                                                                          //
@@ -669,58 +681,58 @@ Mongo.Collection.prototype.update = function () {                               
       * @param {Function} [callback] Optional.  If present, called with an error object as its argument.        //
       */                                                                                                        //
                                                                                                                 //
-Mongo.Collection.prototype.remove = function () {                                                               // 601
-  function remove(selector, callback) {                                                                         // 601
-    selector = Mongo.Collection._rewriteSelector(selector);                                                     // 602
-    var wrappedCallback = wrapCallback(callback);                                                               // 604
+Mongo.Collection.prototype.remove = function () {                                                               // 608
+  function remove(selector, callback) {                                                                         // 608
+    selector = Mongo.Collection._rewriteSelector(selector);                                                     // 609
+    var wrappedCallback = wrapCallback(callback);                                                               // 611
                                                                                                                 //
-    if (this._isRemoteCollection()) {                                                                           // 606
-      return this._callMutatorMethod("remove", [selector], wrappedCallback);                                    // 607
-    } // it's my collection.  descend into the collection object                                                // 608
-    // and propagate any exception.                                                                             // 611
-                                                                                                                //
-                                                                                                                //
-    try {                                                                                                       // 612
-      // If the user provided a callback and the collection implements this                                     // 613
-      // operation asynchronously, then queryRet will be undefined, and the                                     // 614
-      // result will be returned through the callback instead.                                                  // 615
-      return this._collection.remove(selector, wrappedCallback);                                                // 616
-    } catch (e) {                                                                                               // 617
-      if (callback) {                                                                                           // 618
-        callback(e);                                                                                            // 619
-        return null;                                                                                            // 620
-      }                                                                                                         // 621
-                                                                                                                //
-      throw e;                                                                                                  // 622
-    }                                                                                                           // 623
-  }                                                                                                             // 624
-                                                                                                                //
-  return remove;                                                                                                // 601
-}(); // Determine if this collection is simply a minimongo representation of a real                             // 601
-// database on another server                                                                                   // 627
+    if (this._isRemoteCollection()) {                                                                           // 613
+      return this._callMutatorMethod("remove", [selector], wrappedCallback);                                    // 614
+    } // it's my collection.  descend into the collection object                                                // 615
+    // and propagate any exception.                                                                             // 618
                                                                                                                 //
                                                                                                                 //
-Mongo.Collection.prototype._isRemoteCollection = function () {                                                  // 628
-  function _isRemoteCollection() {                                                                              // 628
-    // XXX see #MeteorServerNull                                                                                // 629
-    return this._connection && this._connection !== Meteor.server;                                              // 630
+    try {                                                                                                       // 619
+      // If the user provided a callback and the collection implements this                                     // 620
+      // operation asynchronously, then queryRet will be undefined, and the                                     // 621
+      // result will be returned through the callback instead.                                                  // 622
+      return this._collection.remove(selector, wrappedCallback);                                                // 623
+    } catch (e) {                                                                                               // 624
+      if (callback) {                                                                                           // 625
+        callback(e);                                                                                            // 626
+        return null;                                                                                            // 627
+      }                                                                                                         // 628
+                                                                                                                //
+      throw e;                                                                                                  // 629
+    }                                                                                                           // 630
   }                                                                                                             // 631
                                                                                                                 //
-  return _isRemoteCollection;                                                                                   // 628
-}(); // Convert the callback to not return a result if there is an error                                        // 628
+  return remove;                                                                                                // 608
+}(); // Determine if this collection is simply a minimongo representation of a real                             // 608
+// database on another server                                                                                   // 634
                                                                                                                 //
                                                                                                                 //
-function wrapCallback(callback, convertResult) {                                                                // 634
-  if (!callback) {                                                                                              // 635
-    return;                                                                                                     // 636
-  } // If no convert function was passed in, just use a "blank function"                                        // 637
+Mongo.Collection.prototype._isRemoteCollection = function () {                                                  // 635
+  function _isRemoteCollection() {                                                                              // 635
+    // XXX see #MeteorServerNull                                                                                // 636
+    return this._connection && this._connection !== Meteor.server;                                              // 637
+  }                                                                                                             // 638
+                                                                                                                //
+  return _isRemoteCollection;                                                                                   // 635
+}(); // Convert the callback to not return a result if there is an error                                        // 635
                                                                                                                 //
                                                                                                                 //
-  convertResult = convertResult || _.identity;                                                                  // 640
-  return function (error, result) {                                                                             // 642
-    callback(error, !error && convertResult(result));                                                           // 643
-  };                                                                                                            // 644
-} /**                                                                                                           // 645
+function wrapCallback(callback, convertResult) {                                                                // 641
+  if (!callback) {                                                                                              // 642
+    return;                                                                                                     // 643
+  } // If no convert function was passed in, just use a "blank function"                                        // 644
+                                                                                                                //
+                                                                                                                //
+  convertResult = convertResult || _.identity;                                                                  // 647
+  return function (error, result) {                                                                             // 649
+    callback(error, !error && convertResult(result));                                                           // 650
+  };                                                                                                            // 651
+} /**                                                                                                           // 652
    * @summary Modify one or more documents in the collection, or insert one if no matching documents were found. Returns an object with keys `numberAffected` (the number of documents modified)  and `insertedId` (the unique _id of the document that was inserted, if any).
    * @locus Anywhere                                                                                            //
    * @param {MongoSelector} selector Specifies which documents to modify                                        //
@@ -730,110 +742,110 @@ function wrapCallback(callback, convertResult) {                                
    * @param {Function} [callback] Optional.  If present, called with an error object as the first argument and, if no error, the number of affected documents as the second.
    */                                                                                                           //
                                                                                                                 //
-Mongo.Collection.prototype.upsert = function () {                                                               // 656
-  function upsert(selector, modifier, options, callback) {                                                      // 656
-    if (!callback && typeof options === "function") {                                                           // 658
-      callback = options;                                                                                       // 659
-      options = {};                                                                                             // 660
-    }                                                                                                           // 661
+Mongo.Collection.prototype.upsert = function () {                                                               // 663
+  function upsert(selector, modifier, options, callback) {                                                      // 663
+    if (!callback && typeof options === "function") {                                                           // 665
+      callback = options;                                                                                       // 666
+      options = {};                                                                                             // 667
+    }                                                                                                           // 668
                                                                                                                 //
-    var updateOptions = _.extend({}, options, {                                                                 // 663
-      _returnObject: true,                                                                                      // 664
-      upsert: true                                                                                              // 665
-    });                                                                                                         // 663
+    var updateOptions = _.extend({}, options, {                                                                 // 670
+      _returnObject: true,                                                                                      // 671
+      upsert: true                                                                                              // 672
+    });                                                                                                         // 670
                                                                                                                 //
-    return this.update(selector, modifier, updateOptions, callback);                                            // 668
-  }                                                                                                             // 669
+    return this.update(selector, modifier, updateOptions, callback);                                            // 675
+  }                                                                                                             // 676
                                                                                                                 //
-  return upsert;                                                                                                // 656
-}(); // We'll actually design an index API later. For now, we just pass through to                              // 656
-// Mongo's, but make it synchronous.                                                                            // 672
+  return upsert;                                                                                                // 663
+}(); // We'll actually design an index API later. For now, we just pass through to                              // 663
+// Mongo's, but make it synchronous.                                                                            // 679
                                                                                                                 //
                                                                                                                 //
-Mongo.Collection.prototype._ensureIndex = function (index, options) {                                           // 673
-  var self = this;                                                                                              // 674
-  if (!self._collection._ensureIndex) throw new Error("Can only call _ensureIndex on server collections");      // 675
+Mongo.Collection.prototype._ensureIndex = function (index, options) {                                           // 680
+  var self = this;                                                                                              // 681
+  if (!self._collection._ensureIndex) throw new Error("Can only call _ensureIndex on server collections");      // 682
                                                                                                                 //
-  self._collection._ensureIndex(index, options);                                                                // 677
-};                                                                                                              // 678
+  self._collection._ensureIndex(index, options);                                                                // 684
+};                                                                                                              // 685
                                                                                                                 //
-Mongo.Collection.prototype._dropIndex = function (index) {                                                      // 679
-  var self = this;                                                                                              // 680
-  if (!self._collection._dropIndex) throw new Error("Can only call _dropIndex on server collections");          // 681
+Mongo.Collection.prototype._dropIndex = function (index) {                                                      // 686
+  var self = this;                                                                                              // 687
+  if (!self._collection._dropIndex) throw new Error("Can only call _dropIndex on server collections");          // 688
                                                                                                                 //
-  self._collection._dropIndex(index);                                                                           // 683
-};                                                                                                              // 684
+  self._collection._dropIndex(index);                                                                           // 690
+};                                                                                                              // 691
                                                                                                                 //
-Mongo.Collection.prototype._dropCollection = function () {                                                      // 685
-  var self = this;                                                                                              // 686
+Mongo.Collection.prototype._dropCollection = function () {                                                      // 692
+  var self = this;                                                                                              // 693
   if (!self._collection.dropCollection) throw new Error("Can only call _dropCollection on server collections");
                                                                                                                 //
-  self._collection.dropCollection();                                                                            // 689
-};                                                                                                              // 690
+  self._collection.dropCollection();                                                                            // 696
+};                                                                                                              // 697
                                                                                                                 //
-Mongo.Collection.prototype._createCappedCollection = function (byteSize, maxDocuments) {                        // 691
-  var self = this;                                                                                              // 692
+Mongo.Collection.prototype._createCappedCollection = function (byteSize, maxDocuments) {                        // 698
+  var self = this;                                                                                              // 699
   if (!self._collection._createCappedCollection) throw new Error("Can only call _createCappedCollection on server collections");
                                                                                                                 //
-  self._collection._createCappedCollection(byteSize, maxDocuments);                                             // 695
-}; /**                                                                                                          // 696
+  self._collection._createCappedCollection(byteSize, maxDocuments);                                             // 702
+}; /**                                                                                                          // 703
     * @summary Returns the [`Collection`](http://mongodb.github.io/node-mongodb-native/2.2/api/Collection.html) object corresponding to this collection from the [npm `mongodb` driver module](https://www.npmjs.com/package/mongodb) which is wrapped by `Mongo.Collection`.
     * @locus Server                                                                                             //
     */                                                                                                          //
                                                                                                                 //
-Mongo.Collection.prototype.rawCollection = function () {                                                        // 702
-  var self = this;                                                                                              // 703
+Mongo.Collection.prototype.rawCollection = function () {                                                        // 709
+  var self = this;                                                                                              // 710
                                                                                                                 //
-  if (!self._collection.rawCollection) {                                                                        // 704
-    throw new Error("Can only call rawCollection on server collections");                                       // 705
-  }                                                                                                             // 706
+  if (!self._collection.rawCollection) {                                                                        // 711
+    throw new Error("Can only call rawCollection on server collections");                                       // 712
+  }                                                                                                             // 713
                                                                                                                 //
-  return self._collection.rawCollection();                                                                      // 707
-}; /**                                                                                                          // 708
+  return self._collection.rawCollection();                                                                      // 714
+}; /**                                                                                                          // 715
     * @summary Returns the [`Db`](http://mongodb.github.io/node-mongodb-native/2.2/api/Db.html) object corresponding to this collection's database connection from the [npm `mongodb` driver module](https://www.npmjs.com/package/mongodb) which is wrapped by `Mongo.Collection`.
     * @locus Server                                                                                             //
     */                                                                                                          //
                                                                                                                 //
-Mongo.Collection.prototype.rawDatabase = function () {                                                          // 714
-  var self = this;                                                                                              // 715
+Mongo.Collection.prototype.rawDatabase = function () {                                                          // 721
+  var self = this;                                                                                              // 722
                                                                                                                 //
-  if (!(self._driver.mongo && self._driver.mongo.db)) {                                                         // 716
-    throw new Error("Can only call rawDatabase on server collections");                                         // 717
-  }                                                                                                             // 718
+  if (!(self._driver.mongo && self._driver.mongo.db)) {                                                         // 723
+    throw new Error("Can only call rawDatabase on server collections");                                         // 724
+  }                                                                                                             // 725
                                                                                                                 //
-  return self._driver.mongo.db;                                                                                 // 719
-}; /**                                                                                                          // 720
+  return self._driver.mongo.db;                                                                                 // 726
+}; /**                                                                                                          // 727
     * @summary Create a Mongo-style `ObjectID`.  If you don't specify a `hexString`, the `ObjectID` will generated randomly (not using MongoDB's ID construction rules).
     * @locus Anywhere                                                                                           //
     * @class                                                                                                    //
     * @param {String} [hexString] Optional.  The 24-character hexadecimal contents of the ObjectID to create    //
     */                                                                                                          //
                                                                                                                 //
-Mongo.ObjectID = MongoID.ObjectID; /**                                                                          // 729
+Mongo.ObjectID = MongoID.ObjectID; /**                                                                          // 736
                                     * @summary To create a cursor, use find. To access the documents in a cursor, use forEach, map, or fetch.
                                     * @class                                                                    //
                                     * @instanceName cursor                                                      //
                                     */                                                                          //
-Mongo.Cursor = LocalCollection.Cursor; /**                                                                      // 736
+Mongo.Cursor = LocalCollection.Cursor; /**                                                                      // 743
                                         * @deprecated in 0.9.1                                                  //
                                         */                                                                      //
-Mongo.Collection.Cursor = Mongo.Cursor; /**                                                                     // 741
+Mongo.Collection.Cursor = Mongo.Cursor; /**                                                                     // 748
                                          * @deprecated in 0.9.1                                                 //
                                          */                                                                     //
-Mongo.Collection.ObjectID = Mongo.ObjectID; /**                                                                 // 746
+Mongo.Collection.ObjectID = Mongo.ObjectID; /**                                                                 // 753
                                              * @deprecated in 0.9.1                                             //
                                              */                                                                 //
-Meteor.Collection = Mongo.Collection; // Allow deny stuff is now in the allow-deny package                      // 751
+Meteor.Collection = Mongo.Collection; // Allow deny stuff is now in the allow-deny package                      // 758
                                                                                                                 //
-_.extend(Meteor.Collection.prototype, AllowDeny.CollectionPrototype);                                           // 754
+_.extend(Meteor.Collection.prototype, AllowDeny.CollectionPrototype);                                           // 761
                                                                                                                 //
-function popCallbackFromArgs(args) {                                                                            // 756
-  // Pull off any callback (or perhaps a 'callback' variable that was passed                                    // 757
-  // in undefined, like how 'upsert' does it).                                                                  // 758
-  if (args.length && (args[args.length - 1] === undefined || args[args.length - 1] instanceof Function)) {      // 759
-    return args.pop();                                                                                          // 762
-  }                                                                                                             // 763
-}                                                                                                               // 764
+function popCallbackFromArgs(args) {                                                                            // 763
+  // Pull off any callback (or perhaps a 'callback' variable that was passed                                    // 764
+  // in undefined, like how 'upsert' does it).                                                                  // 765
+  if (args.length && (args[args.length - 1] === undefined || args[args.length - 1] instanceof Function)) {      // 766
+    return args.pop();                                                                                          // 769
+  }                                                                                                             // 770
+}                                                                                                               // 771
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }}}}},{"extensions":[".js",".json"]});

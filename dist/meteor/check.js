@@ -529,7 +529,7 @@ var _prependPath = function (key, base) {                                       
 //                                                                                                                   //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                                                                                                                      //
-// Copy of jQuery.isPlainObject for the server side from jQuery v1.11.2.                                             // 1
+// Copy of jQuery.isPlainObject for the server side from jQuery v3.1.1.                                              // 1
                                                                                                                      // 2
 var class2type = {};                                                                                                 // 3
                                                                                                                      // 4
@@ -537,64 +537,34 @@ var toString = class2type.toString;                                             
                                                                                                                      // 6
 var hasOwn = class2type.hasOwnProperty;                                                                              // 7
                                                                                                                      // 8
-var support = {};                                                                                                    // 9
+var fnToString = hasOwn.toString;                                                                                    // 9
                                                                                                                      // 10
-// Populate the class2type map                                                                                       // 11
-_.each("Boolean Number String Function Array Date RegExp Object Error".split(" "), function(name, i) {               // 12
-  class2type[ "[object " + name + "]" ] = name.toLowerCase();                                                        // 13
-});                                                                                                                  // 14
-                                                                                                                     // 15
-function type( obj ) {                                                                                               // 16
-  if ( obj == null ) {                                                                                               // 17
-    return obj + "";                                                                                                 // 18
-  }                                                                                                                  // 19
-  return typeof obj === "object" || typeof obj === "function" ?                                                      // 20
-    class2type[ toString.call(obj) ] || "object" :                                                                   // 21
-    typeof obj;                                                                                                      // 22
-}                                                                                                                    // 23
+var ObjectFunctionString = fnToString.call(Object);                                                                  // 11
+                                                                                                                     // 12
+var getProto = Object.getPrototypeOf;                                                                                // 13
+                                                                                                                     // 14
+exports.isPlainObject = function( obj ) {                                                                            // 15
+  var proto,                                                                                                         // 16
+    Ctor;                                                                                                            // 17
+                                                                                                                     // 18
+  // Detect obvious negatives                                                                                        // 19
+  // Use toString instead of jQuery.type to catch host objects                                                       // 20
+  if (!obj || toString.call(obj) !== "[object Object]") {                                                            // 21
+    return false;                                                                                                    // 22
+  }                                                                                                                  // 23
                                                                                                                      // 24
-function isWindow( obj ) {                                                                                           // 25
-  /* jshint eqeqeq: false */                                                                                         // 26
-  return obj != null && obj == obj.window;                                                                           // 27
-}                                                                                                                    // 28
-                                                                                                                     // 29
-exports.isPlainObject = function( obj ) {                                                                            // 30
-  var key;                                                                                                           // 31
-                                                                                                                     // 32
-  // Must be an Object.                                                                                              // 33
-  // Because of IE, we also have to check the presence of the constructor property.                                  // 34
-  // Make sure that DOM nodes and window objects don't pass through, as well                                         // 35
-  if ( !obj || type(obj) !== "object" || obj.nodeType || isWindow( obj ) ) {                                         // 36
-    return false;                                                                                                    // 37
-  }                                                                                                                  // 38
-                                                                                                                     // 39
-  try {                                                                                                              // 40
-    // Not own constructor property must be Object                                                                   // 41
-    if ( obj.constructor &&                                                                                          // 42
-         !hasOwn.call(obj, "constructor") &&                                                                         // 43
-         !hasOwn.call(obj.constructor.prototype, "isPrototypeOf") ) {                                                // 44
-      return false;                                                                                                  // 45
-    }                                                                                                                // 46
-  } catch ( e ) {                                                                                                    // 47
-    // IE8,9 Will throw exceptions on certain host objects #9897                                                     // 48
-    return false;                                                                                                    // 49
-  }                                                                                                                  // 50
-                                                                                                                     // 51
-  // Support: IE<9                                                                                                   // 52
-  // Handle iteration over inherited properties before own properties.                                               // 53
-  if ( support.ownLast ) {                                                                                           // 54
-    for ( key in obj ) {                                                                                             // 55
-      return hasOwn.call( obj, key );                                                                                // 56
-    }                                                                                                                // 57
-  }                                                                                                                  // 58
-                                                                                                                     // 59
-  // Own properties are enumerated firstly, so to speed up,                                                          // 60
-  // if last one is own, then all properties are own.                                                                // 61
-  for ( key in obj ) {}                                                                                              // 62
-                                                                                                                     // 63
-  return key === undefined || hasOwn.call( obj, key );                                                               // 64
-};                                                                                                                   // 65
-                                                                                                                     // 66
+  proto = getProto(obj);                                                                                             // 25
+                                                                                                                     // 26
+  // Objects with no prototype (e.g., `Object.create( null )`) are plain                                             // 27
+  if (!proto) {                                                                                                      // 28
+    return true;                                                                                                     // 29
+  }                                                                                                                  // 30
+                                                                                                                     // 31
+  // Objects with prototype are plain iff they were constructed by a global Object function                          // 32
+  Ctor = hasOwn.call(proto, "constructor") && proto.constructor;                                                     // 33
+  return typeof Ctor === "function" && fnToString.call(Ctor) === ObjectFunctionString;                               // 34
+};                                                                                                                   // 35
+                                                                                                                     // 36
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }}}}},{"extensions":[".js",".json"]});

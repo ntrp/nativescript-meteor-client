@@ -1,6 +1,6 @@
-module.exports = function (opts) {
+module.exports = function (opts, wsImpl) {
     (function () {
-        require('./meteor-runtime-config')(opts);
+        require('./meteor-runtime-config')(opts, wsImpl);
         require('./underscore');
         require('./meteor');
         require('./modules-runtime');
@@ -27,8 +27,16 @@ module.exports = function (opts) {
         require('./minimongo');
         require('./allow-deny');
         require('./mongo');
-        require('./global-imports');
+        require('./localstorage.js');
+        require('./callback-hook.js');
+        require('./reactive-var.js');
+        require('./accounts-base.js');
+        require('./sha.js');
+        require('./srp.js');
+        require('./accounts-password.js');
+        require('./global-imports.js');
+        require('./service-configuration.js');
     }).call(that);
-}
+};
 
 var that = this;
